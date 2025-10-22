@@ -15,11 +15,12 @@ from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
 ##
 # Configuration
 ##
-
 HUMANOID_28_EXO_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Robot",
     spawn=sim_utils.UsdFileCfg(
-        usd_path=f"{ISAACLAB_NUCLEUS_DIR}/Robots/Classic/Humanoid28/humanoid_28_exo.usd",
+        # usd_path=f"{ISAACLAB_NUCLEUS_DIR}/Robots/Classic/Humanoid28/humanoid_28.usd",
+        # /home/hy/isaacsim_assets/Assets/Isaac/4.5/Isaac/IsaacLab/Robots/Classic
+        usd_path=f"{ISAACLAB_NUCLEUS_DIR}/Robots/Classic/Humanoid28Exo/humanoid_28_exo.usd",
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=None,
             max_depenetration_velocity=10.0,

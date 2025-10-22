@@ -62,6 +62,7 @@ class ExoHumanoidAmpEnvCfg(DirectRLEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=10.0, replicate_physics=True)
 
     # robot
+    # 设置USD导入路径***
     robot: ArticulationCfg = HUMANOID_28_EXO_CFG.replace(prim_path="/World/envs/env_.*/Robot").replace(
         actuators={
             "body": ImplicitActuatorCfg(
