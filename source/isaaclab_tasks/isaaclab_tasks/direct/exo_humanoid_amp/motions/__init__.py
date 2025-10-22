@@ -4,8 +4,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-Direct workflow environments.
+AMP Motion Loader and motion files.
 """
 
-import gymnasium as gym
-
+from .motion_loader import MotionLoader
+from .motion_viewer import MotionViewer
