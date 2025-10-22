@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 from dataclasses import MISSING
 
-from isaaclab_assets import HUMANOID_28_CFG
+from isaaclab_assets import HUMANOID_28_EXO_CFG
 
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
@@ -20,7 +20,7 @@ from isaaclab.utils import configclass
 MOTIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "motions")
 
 
-@configclass
+@configclass  # 装饰器
 class ExoHumanoidAmpEnvCfg(DirectRLEnvCfg):
     """Exo Humanoid AMP environment config (base class)."""
 
@@ -40,7 +40,7 @@ class ExoHumanoidAmpEnvCfg(DirectRLEnvCfg):
 
     motion_file: str = MISSING
     reference_body = "torso"
-    reset_strategy = "random"  # default, random, random-start
+    reset_strategy = "random"  # 重置模式 default, random, random-start
     """Strategy to be followed when resetting each environment (humanoid's pose and joint states).
 
     * default: pose and joint states are set to the initial state of the asset.
@@ -62,7 +62,7 @@ class ExoHumanoidAmpEnvCfg(DirectRLEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=10.0, replicate_physics=True)
 
     # robot
-    robot: ArticulationCfg = HUMANOID_28_CFG.replace(prim_path="/World/envs/env_.*/Robot").replace(
+    robot: ArticulationCfg = HUMANOID_28_EXO_CFG.replace(prim_path="/World/envs/env_.*/Robot").replace(
         actuators={
             "body": ImplicitActuatorCfg(
                 joint_names_expr=[".*"],

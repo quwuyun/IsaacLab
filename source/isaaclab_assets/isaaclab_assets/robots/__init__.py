@@ -27,3 +27,5 @@ from .shadow_hand import *
 from .spot import *
 from .unitree import *
 from .universal_robots import *
+
+from .humanoid_28_exo import *
