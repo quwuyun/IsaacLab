@@ -20,13 +20,13 @@ HUMANOID_28_EXO_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
         # usd_path=f"{ISAACLAB_NUCLEUS_DIR}/Robots/Classic/Humanoid28/humanoid_28.usd",
         # /home/hy/isaacsim_assets/Assets/Isaac/4.5/Isaac/IsaacLab/Robots/Classic
-        usd_path=f"{ISAACLAB_NUCLEUS_DIR}/Robots/Classic/Humanoid28Exo/humanoid_28_exo.usd",
+        usd_path="/home/hy/isaacsim_assets/Assets/Isaac/4.5/Isaac/IsaacLab/Robots/Classic/Humanoid28Exo/model/HumanoidExo-v0/World1.usd",
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=None,
             max_depenetration_velocity=10.0,
             enable_gyroscopic_forces=True,
         ),
-        articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+        articulation_props=sim_utils.ArticulationRootPropertiesCfg(  # 根属性
             enabled_self_collisions=True,
             solver_position_iteration_count=4,
             solver_velocity_iteration_count=0,
@@ -46,6 +46,12 @@ HUMANOID_28_EXO_CFG = ArticulationCfg(
             damping=None,
             velocity_limit_sim={".*": 100.0},
         ),
+        # "exo": ImplicitActuatorCfg(
+        #     joint_names_expr=[".*"],
+        #     stiffness=None,
+        #     damping=None,
+        #     velocity_limit_sim={".*": 50.0},
+        # ),
     },
 )
 """Configuration for the 28-DOFs Mujoco Humanoid robot."""

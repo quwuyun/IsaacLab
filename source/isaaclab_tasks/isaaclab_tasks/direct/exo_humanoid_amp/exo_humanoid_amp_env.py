@@ -25,6 +25,10 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
     def __init__(self, cfg: ExoHumanoidAmpEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
+        print("Joint names:", self.robot.data.joint_names)
+        print("Body names:", self.robot.data.body_names)
+        print("Num DOFs:", len(self.robot.data.joint_names))
+
         # action offset and scale
         dof_lower_limits = self.robot.data.soft_joint_pos_limits[0, :, 0]
         dof_upper_limits = self.robot.data.soft_joint_pos_limits[0, :, 1]
@@ -86,8 +90,8 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
     def _get_observations(self) -> dict:
         # build task observation
         obs = compute_obs(
-            self.robot.data.joint_pos,  # dof角度1*28
-            self.robot.data.joint_vel,  # dof角速度1*28
+            self.robot.data.joint_pos,  # dof角度1*30
+            self.robot.data.joint_vel,  # dof角速度1*30
             self.robot.data.body_pos_w[:, self.ref_body_index],  # torso位置1*3 --->1*1高度
             self.robot.data.body_quat_w[:, self.ref_body_index],  # torso四元数1*4 --->1*6投影基
             self.robot.data.body_lin_vel_w[:, self.ref_body_index],  # torso线速度1*3

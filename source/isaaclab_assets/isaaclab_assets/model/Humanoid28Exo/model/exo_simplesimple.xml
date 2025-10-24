@@ -1,0 +1,96 @@
+<mujoco model="all18.sldasm">
+  <option timestep="0.002" collision="predefined">
+    <!-- <flag energy="enable"></flag> -->
+  </option>
+  <asset>
+<!--    <mesh name="hl1" file="hl1.STL" />-->
+<!--    <mesh name="kl" file="kl.STL" />-->
+<!--    <mesh name="hr1" file="hr1.STL" />-->
+<!--    <mesh name="kr" file="kr.STL" />-->
+  </asset>
+  <default>
+    <joint type="hinge" damping="0.01" />
+    <default class="collision">
+<!--      <geom contype="1" conaffinity="0" group="4" type="mesh"></geom>-->
+      <geom contype="1" conaffinity="0" group="4" type="box"></geom>
+    </default>
+    <default class="visual">
+      <geom contype="0" conaffinity="0" group="1" type="box"></geom>
+    </default>
+    <default class="touch">
+        <site type="capsule" rgba="0 0 1 .3"/>
+    </default>
+  </default>
+  
+  <worldbody>
+    <geom name="floor" type="plane" conaffinity="1" size="100 100 .2" material="grid"/>
+    <body name="base" pos="0 0 1">
+      <freejoint name="root"/>
+      <inertial pos="0 0 0" mass="0.05" diaginertia="0.01 0.01 0.01"/>
+      
+      <body name="hr1" pos="0.0 -0.18 0">
+        <inertial pos="0.0130834 0.0237236 -0.172316"
+          quat="0.607099 0.0833733 0.0663533 0.787449" mass="1.0083"
+          diaginertia="0.00178463 0.0014557 0.000901962" />
+<!--          <joint name="jhr1" pos="0 0 0" axis="0 -1 0" />-->
+<!--        <geom mesh="hr1" class="collision" />-->
+<!--        <geom mesh="hr1" class="visual" />-->
+	<freejoint name="hipr"/>
+        <geom size="0.03 0.02 0.1" pos="0 0 -0.3" class="collision"/>
+        <geom size="0.03 0.02 0.1" pos="0 0 -0.3" class="visual"/>
+        <!--<site name="right_thigh" class="touch" pos="0 0 -0.21" size="0.056 0.301" zaxis="0 0 -1"/>/>-->
+        
+        <body name="kr" pos="0 0 -0.421546" euler="0 -0.0 0">
+          <inertial pos="0.00503437 0.0459504 -0.114047"
+            quat="0.957319 0.249459 0.0977416 -0.108429" mass="0.0678212"
+            diaginertia="0.000272102 0.000235178 5.15354e-05" />
+          <joint name="jkr" pos="0.0 0 0" axis="0 -1 0" />
+<!--          <geom mesh="kr" class="collision" />-->
+<!--          <geom mesh="kr" class="visual" />-->
+          <geom size="0.03 0.02 0.1" pos="0 0 -0.105" class="collision"/>
+          <geom size="0.03 0.02 0.1" pos="0 0 -0.105" class="visual"/>
+          <!--<site name="right_shin" class="touch" pos="0 0 -0.2" size="0.051 0.156" zaxis="0 0 -1"/>/>-->
+        </body>
+      </body>
+
+      <body name="hl1" pos="0.0 0.18 0">
+        <inertial pos="0.0133499 -0.0238046 -0.172665"
+          quat="0.787918 0.063466 0.0788592 0.607403" mass="1.01104"
+          diaginertia="0.00178546 0.00145433 0.000903882" />
+<!--          <joint name="jhl1" pos="0 0 0" axis="0 1 0" />-->
+<!--        <geom mesh="hl1" class="collision" />-->
+<!--        <geom mesh="hl1" class="visual" />-->
+	<freejoint name="hipl"/>
+        <geom size="0.03 0.02 0.1" pos="0 0 -0.3" class="collision"/>
+        <geom size="0.03 0.02 0.1" pos="0 0 -0.3" class="visual"/>
+        <!--<site name="left_thigh" class="touch" pos="0 0 -0.21" size="0.056 0.301" zaxis="0 0 -1"/>/>-->
+
+        <body name="kl" pos="0 0 -0.421546" euler="0 -0 0">
+          <inertial pos="0.0112091 -0.0406631 -0.0980587"
+            quat="0.961281 -0.248786 0.0677521 0.0972343" mass="0.0787945"
+            diaginertia="0.00027592 0.000239557 5.37921e-05" />
+          <joint name="jkl" pos="0.0 0 0" axis="0 -1 0" />
+<!--          <geom mesh="kl" class="collision" />-->
+<!--          <geom mesh="kl" class="visual" />-->
+          <geom size="0.03 0.02 0.1" pos="0 0 -0.105" class="collision"/>
+          <geom size="0.03 0.02 0.1" pos="0 0 -0.105" class="visual"/>
+          <!--<site name="left_shin" class="touch" pos="0 0 -0.2" size="0.051 0.156" zaxis="0 0 -1"/>/>-->
+        </body>
+      </body>
+    </body>
+  </worldbody>
+<!--  <equality>-->
+<!--    &lt;!&ndash; <weld body1="base" body2="W" solref='0.001 1'  ></weld> &ndash;&gt;-->
+<!--    <connect body1="LGL5" body2="base" solref='0.005 1' anchor='-0.021 -0.095 0 '></connect>-->
+<!--    <connect body1="LGL4" body2="hl0" solref='0.005 1' anchor='-0.116 0 0.17 '></connect>-->
+<!--    &lt;!&ndash; <weld body1="hl0" body2="Q" solref='0.001 1'  ></weld> &ndash;&gt;-->
+<!--    &lt;!&ndash; <weld body1="base" body2="WW" solref='0.005 1'  ></weld> &ndash;&gt;-->
+<!--    &lt;!&ndash; <weld body1="hr0" body2="QQ" solref='0.005 1'  ></weld> &ndash;&gt;-->
+<!--    <connect body1="LGR5" body2="base" solref='0.005 1' anchor='-0.021 0.095 0'></connect>-->
+<!--    <connect body1="LGR4" body2="hr0" solref='0.005 1' anchor='-0.116 0 0.17'></connect>-->
+<!--  </equality>-->
+  <actuator>
+    <motor name='exo_knee_r'       gear='100' joint='jkr'/>
+    <motor name='exo_knee_l'       gear='100' joint='jkl'/>
+  </actuator>
+</mujoco>

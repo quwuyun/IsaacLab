@@ -29,8 +29,8 @@ class ExoHumanoidAmpEnvCfg(DirectRLEnvCfg):
     decimation = 2
 
     # spaces
-    observation_space = 81
-    action_space = 28
+    observation_space = 81+4
+    action_space = 28+2
     state_space = 0
     num_amp_observations = 2
     amp_observation_space = 81

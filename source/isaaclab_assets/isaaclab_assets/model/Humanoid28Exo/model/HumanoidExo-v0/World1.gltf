@@ -1,0 +1,705 @@
+{
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5125,
+      "count": 6,
+      "max": [
+        3
+      ],
+      "min": [
+        0
+      ],
+      "name": "Face Vertex Indices Accessor",
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 4,
+      "max": [
+        100.0,
+        100.0,
+        1.1754943508222875e-38
+      ],
+      "min": [
+        -100.0,
+        -100.0,
+        0.0
+      ],
+      "name": "Face Points Accessor",
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 4,
+      "max": [
+        1.1754943508222875e-38,
+        1.1754943508222875e-38,
+        1.0
+      ],
+      "min": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "Face Normals Accessor",
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 4,
+      "max": [
+        32767,
+        32767,
+        32767
+      ],
+      "min": [
+        32767,
+        32767,
+        32767
+      ],
+      "name": "Face COLOR0 Accessor",
+      "normalized": true,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5125,
+      "count": 6,
+      "max": [
+        3
+      ],
+      "min": [
+        0
+      ],
+      "name": "Face Vertex Indices Accessor",
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 4,
+      "max": [
+        100.0,
+        100.0,
+        1.1754943508222875e-38
+      ],
+      "min": [
+        -100.0,
+        -100.0,
+        0.0
+      ],
+      "name": "Face Points Accessor",
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 4,
+      "max": [
+        1.1754943508222875e-38,
+        1.1754943508222875e-38,
+        1.0
+      ],
+      "min": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "Face Normals Accessor",
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5123,
+      "count": 4,
+      "max": [
+        32767,
+        32767,
+        32767
+      ],
+      "min": [
+        32767,
+        32767,
+        32767
+      ],
+      "name": "Face COLOR0 Accessor",
+      "normalized": true,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5125,
+      "count": 6,
+      "max": [
+        3
+      ],
+      "min": [
+        0
+      ],
+      "name": "Face Vertex Indices Accessor",
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5126,
+      "count": 4,
+      "max": [
+        50.0,
+        50.0,
+        1.1754943508222875e-38
+      ],
+      "min": [
+        -50.0,
+        -50.0,
+        0.0
+      ],
+      "name": "Face Points Accessor",
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 10,
+      "componentType": 5126,
+      "count": 4,
+      "max": [
+        1.1754943508222875e-38,
+        1.1754943508222875e-38,
+        1.0
+      ],
+      "min": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "Face Normals Accessor",
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 11,
+      "componentType": 5126,
+      "count": 4,
+      "max": [
+        1.0,
+        1.0
+      ],
+      "min": [
+        0.0,
+        0.0
+      ],
+      "name": "Face UV0 Accessor",
+      "type": "VEC2"
+    }
+  ],
+  "asset": {
+    "generator": "Exported from Omniverse GLTF Converter.",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 24,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 48,
+      "byteOffset": 24,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 48,
+      "byteOffset": 72,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 32,
+      "byteOffset": 120,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 24,
+      "byteOffset": 152,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 48,
+      "byteOffset": 176,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 48,
+      "byteOffset": 224,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 32,
+      "byteOffset": 272,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 24,
+      "byteOffset": 304,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 48,
+      "byteOffset": 328,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 48,
+      "byteOffset": 376,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 32,
+      "byteOffset": 424,
+      "target": 34962
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 456,
+      "name": "Model Data",
+      "uri": "data:application/octet-stream;base64,AAAAAAEAAAACAAAAAAAAAAIAAAADAAAAAADIwgAAyMIAAAAAAADIwgAAyEIAAAAAAADIQgAAyEIAAAAAAADIQgAAyMIAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA//3//f/9/AAD/f/9//38AAP9//3//fwAA/3//f/9/AAAAAAAAAQAAAAIAAAAAAAAAAgAAAAMAAAAAAMjCAADIwgAAAAAAAMjCAADIQgAAAAAAAMhCAADIQgAAAAAAAMhCAADIwgAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD//f/9//38AAP9//3//fwAA/3//f/9/AAD/f/9//38AAAAAAAABAAAAAgAAAAAAAAACAAAAAwAAAAAASMIAAEjCAAAAAAAASEIAAEjCAAAAAAAASEIAAEhCAAAAAAAASMIAAEhCAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAA"
+    }
+  ],
+  "extensions": {
+    "KHR_lights_punctual": {
+      "lights": [
+        {
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "intensity": 3.141592653589793,
+          "name": "Sky",
+          "spot": {
+            "innerConeAngle": 0.0,
+            "outerConeAngle": 0.7853981634
+          },
+          "type": "spot"
+        },
+        {
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "intensity": 50.26548245743669,
+          "name": "DistantLight",
+          "type": "directional"
+        }
+      ]
+    }
+  },
+  "extensionsRequired": [
+    "KHR_lights_punctual"
+  ],
+  "extensionsUsed": [
+    "KHR_lights_punctual"
+  ],
+  "meshes": [
+    {
+      "name": "floor",
+      "primitives": [
+        {
+          "attributes": {
+            "COLOR_0": 3,
+            "NORMAL": 2,
+            "POSITION": 1
+          },
+          "indices": 0,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "floor",
+      "primitives": [
+        {
+          "attributes": {
+            "COLOR_0": 7,
+            "NORMAL": 6,
+            "POSITION": 5
+          },
+          "indices": 4,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "ground",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 10,
+            "POSITION": 9,
+            "TEXCOORD_0": 11
+          },
+          "indices": 8,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "children": [
+        1,
+        12
+      ],
+      "name": "World",
+      "rotation": [
+        0.7071067811865476,
+        0.0,
+        0.0,
+        -0.7071067811865475
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "children": [
+        2,
+        7
+      ],
+      "name": "World",
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "children": [
+        3
+      ],
+      "name": "amp_humanoid_legexo",
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        9.5367431640625e-07
+      ]
+    },
+    {
+      "children": [
+        4
+      ],
+      "name": "worldBody",
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "children": [
+        5
+      ],
+      "name": "floor",
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "children": [
+        6
+      ],
+      "name": "visuals",
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "mesh": 0,
+      "name": "floor",
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "children": [
+        8
+      ],
+      "name": "exo_simplesimple",
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "children": [
+        9
+      ],
+      "name": "worldBody",
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "children": [
+        10
+      ],
+      "name": "floor",
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "children": [
+        11
+      ],
+      "name": "visuals",
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "mesh": 1,
+      "name": "floor",
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "children": [
+        13,
+        14
+      ],
+      "mesh": 2,
+      "name": "Environment",
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "extensions": {
+        "KHR_lights_punctual": {
+          "light": 0
+        }
+      },
+      "name": "Sky",
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        305.0
+      ]
+    },
+    {
+      "extensions": {
+        "KHR_lights_punctual": {
+          "light": 1
+        }
+      },
+      "name": "DistantLight",
+      "rotation": [
+        -0.13052619222005182,
+        -0.0,
+        0.0,
+        0.9914448613738104
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        305.0
+      ]
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "DefaultScene",
+      "nodes": [
+        0
+      ]
+    }
+  ]
+}
