@@ -28,7 +28,17 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         print("Joint names:", self.robot.data.joint_names)
         print("Body names:", self.robot.data.body_names)
         print("Num DOFs:", len(self.robot.data.joint_names))
+        print("Num DOFs:", len(self.robot.data.body_names))
 
+        self.human_joint_names = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'neck_x', 'neck_y', 'neck_z', 'right_shoulder_x', 'right_shoulder_y', 'right_shoulder_z', 
+                                  'right_elbow', 'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'left_elbow', 'right_hip_x', 'right_hip_y', 'right_hip_z', 
+                                  'right_knee', 'right_ankle_x', 'right_ankle_y', 'right_ankle_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 'left_knee', 
+                                  'left_ankle_x', 'left_ankle_y', 'left_ankle_z']
+        self.exo_joint_names = ["exo_D6Joint0:0", "exo_D6Joint0:1", "exo_D6Joint0:2", "exo_right_hip:0", "exo_right_hip:1", "exo_right_hip:2",
+                                "exo_left_hip:0", "exo_left_hip:1", "exo_left_hip:2", "exo_right_knee", "exo_left_knee"]
+        self.human_exo_joint_names = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'right_hip_x', 'right_hip_y', 'right_hip_z', 'right_knee', 
+                                      'left_hip_x', 'left_hip_y', 'left_hip_z', 'left_knee']
+        
         # action offset and scale
         dof_lower_limits = self.robot.data.soft_joint_pos_limits[0, :, 0]
         dof_upper_limits = self.robot.data.soft_joint_pos_limits[0, :, 1]
@@ -37,14 +47,24 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
 
         # load motion
         self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
+        print("motion加载成功")
 
         # DOF and key body indexes
         key_body_names = ["right_hand", "left_hand", "right_foot", "left_foot"]
         self.ref_body_index = self.robot.data.body_names.index(self.cfg.reference_body)  # 躯干torso索引
         self.key_body_indexes = [self.robot.data.body_names.index(name) for name in key_body_names]
-        self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)  # 关节dof索引
         self.motion_ref_body_index = self._motion_loader.get_body_index([self.cfg.reference_body])[0]
         self.motion_key_body_indexes = self._motion_loader.get_body_index(key_body_names)
+
+        # self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)  # 关节dof索引数组
+        self.motion_human_dof_indexes = self._motion_loader.get_dof_index(self.human_joint_names)  # 关节dof索引数组
+        print("Motion DOF indexes:", self.motion_human_dof_indexes)
+        self.human_dof_indices = [self.robot.data.joint_names.index(name) for name in self.human_joint_names]
+        self.exo_dof_indices = [self.robot.data.joint_names.index(name) for name in self.exo_joint_names]
+        self.human_exo_dof_indices = [self.robot.data.joint_names.index(name) for name in self.human_exo_joint_names]
+        print("Human DOF indexes:", self.human_dof_indices)
+        print("Exo DOF indexes:", self.exo_dof_indices)
+        print("Human-Exo DOF indexes:", self.human_exo_dof_indices)
 
         # reconfigure AMP observation space according to the number of observations and create the buffer
         self.amp_observation_size = self.cfg.num_amp_observations * self.cfg.amp_observation_space  # 历史长度*空间大小
@@ -53,7 +73,8 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
             (self.num_envs, self.cfg.num_amp_observations, self.cfg.amp_observation_space), device=self.device
         )
         # (num_envs, 2, 81)
-    
+        print("初始化成功")
+
     # 设置模拟场景
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot)  # 初始化机器人
@@ -90,8 +111,8 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
     def _get_observations(self) -> dict:
         # build task observation
         obs = compute_obs(
-            self.robot.data.joint_pos,  # dof角度1*30
-            self.robot.data.joint_vel,  # dof角速度1*30
+            self.robot.data.joint_pos,  # dof角度1*39
+            self.robot.data.joint_vel,  # dof角速度1*39
             self.robot.data.body_pos_w[:, self.ref_body_index],  # torso位置1*3 --->1*1高度
             self.robot.data.body_quat_w[:, self.ref_body_index],  # torso四元数1*4 --->1*6投影基
             self.robot.data.body_lin_vel_w[:, self.ref_body_index],  # torso线速度1*3
@@ -103,7 +124,14 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         for i in reversed(range(self.cfg.num_amp_observations - 1)):
             self.amp_observation_buffer[:, i + 1] = self.amp_observation_buffer[:, i]
         # build AMP observation
-        self.amp_observation_buffer[:, 0] = obs.clone()
+        # self.amp_observation_buffer[:, 0] = obs.clone()
+        human_dof_indices_tensor = torch.tensor(self.human_dof_indices, device=obs.device)
+        human_joint_vel_indices = 39 + human_dof_indices_tensor
+        self.amp_observation_buffer[:, 0] = torch.cat([
+            obs[:, self.human_dof_indices],  # 28dof在39dof的关节位置索引
+            obs[:, human_joint_vel_indices],
+            obs[:, 78:103]
+            ], dim=-1)  # torso和关键刚体位置
         self.extras = {"amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)}  # 扁平化AMP观测值供判别器使用
 
         return {"policy": obs}
@@ -154,7 +182,7 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         # sample random motion times (or zeros if start is True)
         num_samples = env_ids.shape[0]  # 环境数
         times = np.zeros(num_samples) if start else self._motion_loader.sample_times(num_samples)
-        # sample random motions
+        # sample random motions 28dof
         (
             dof_positions,
             dof_velocities,
@@ -172,10 +200,17 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         root_state[:, 3:7] = body_rotations[:, motion_torso_index]
         root_state[:, 7:10] = body_linear_velocities[:, motion_torso_index]
         root_state[:, 10:13] = body_angular_velocities[:, motion_torso_index]
-        # get DOFs state
-        dof_pos = dof_positions[:, self.motion_dof_indexes]
-        dof_vel = dof_velocities[:, self.motion_dof_indexes]
 
+        # get DOFs state
+        # dof_pos = dof_positions[:, self.motion_dof_indexes]
+        # dof_vel = dof_velocities[:, self.motion_dof_indexes]
+        dof_pos = torch.zeros((num_samples, 39), device=self.device)
+        dof_vel = torch.zeros((num_samples, 39), device=self.device)
+        dof_pos[:, self.human_dof_indices] = dof_positions[:, self.motion_human_dof_indexes]
+        dof_vel[:, self.human_dof_indices] = dof_velocities[:, self.motion_human_dof_indexes]
+        dof_pos[:, self.exo_dof_indices] = dof_pos[:, self.human_exo_dof_indices]  # 重置外骨骼关节位置为人体对应刚体位置
+        dof_vel[:, self.exo_dof_indices] = 0.0
+        
         # update AMP observation
         amp_observations = self.collect_reference_motions(num_samples, times)
         self.amp_observation_buffer[env_ids] = amp_observations.view(num_samples, self.cfg.num_amp_observations, -1)
@@ -204,8 +239,8 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         ) = self._motion_loader.sample(num_samples=num_samples, times=times)
         # compute AMP observation
         amp_observation = compute_obs(
-            dof_positions[:, self.motion_dof_indexes],
-            dof_velocities[:, self.motion_dof_indexes],
+            dof_positions[:, self.motion_human_dof_indexes],  # 只使用人体关节位置
+            dof_velocities[:, self.motion_human_dof_indexes],
             body_positions[:, self.motion_ref_body_index],
             body_rotations[:, self.motion_ref_body_index],
             body_linear_velocities[:, self.motion_ref_body_index],

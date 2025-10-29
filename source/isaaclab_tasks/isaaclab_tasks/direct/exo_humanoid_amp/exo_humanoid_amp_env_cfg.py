@@ -29,8 +29,8 @@ class ExoHumanoidAmpEnvCfg(DirectRLEnvCfg):
     decimation = 2
 
     # spaces
-    observation_space = 81+4
-    action_space = 28+2
+    observation_space = 81+22  # num_exo_dof_obs=22 (11*2)
+    action_space = 28+11  # 添加num_exo_dof=11 (3+(3+1)*2)
     state_space = 0
     num_amp_observations = 2
     amp_observation_space = 81
@@ -50,11 +50,11 @@ class ExoHumanoidAmpEnvCfg(DirectRLEnvCfg):
 
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1 / 60,
+        dt=1 / 120,  # 1 / 60
         render_interval=decimation,
         physx=PhysxCfg(
-            gpu_found_lost_pairs_capacity=2**23,
-            gpu_total_aggregate_pairs_capacity=2**23,
+            gpu_found_lost_pairs_capacity=2**25,  # 2**23
+            gpu_total_aggregate_pairs_capacity=2**25,  # 2**23
         ),
     )
 

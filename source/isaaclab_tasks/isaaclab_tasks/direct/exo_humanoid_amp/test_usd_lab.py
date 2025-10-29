@@ -31,56 +31,7 @@ from isaaclab.assets.articulation import ArticulationCfg
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
-# JETBOT_CONFIG = ArticulationCfg(
-#     # spawn=sim_utils.UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Robots/NVIDIA/Jetbot/jetbot.usd"),
-#     spawn=sim_utils.UsdFileCfg(usd_path="/home/hy/isaacsim_assets/Assets/Isaac/4.5/Isaac/IsaacLab/Robots/Classic/Humanoid28Exo/humanoid28_exo.usd"),
-#     actuators={"wheel_acts": ImplicitActuatorCfg(joint_names_expr=[".*"], damping=None, stiffness=None)},
-# )
 
-# DOFBOT_CONFIG = ArticulationCfg(
-#     spawn=sim_utils.UsdFileCfg(
-#         usd_path=f"{ISAAC_NUCLEUS_DIR}/Robots/Yahboom/Dofbot/dofbot.usd",
-#         rigid_props=sim_utils.RigidBodyPropertiesCfg(
-#             disable_gravity=False,
-#             max_depenetration_velocity=5.0,
-#         ),
-#         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-#             enabled_self_collisions=True, solver_position_iteration_count=8, solver_velocity_iteration_count=0
-#         ),
-#     ),
-#     init_state=ArticulationCfg.InitialStateCfg(
-#         joint_pos={
-#             "joint1": 0.0,
-#             "joint2": 0.0,
-#             "joint3": 0.0,
-#             "joint4": 0.0,
-#         },
-#         pos=(0.25, -0.25, 0.0),
-#     ),
-#     actuators={
-#         "front_joints": ImplicitActuatorCfg(
-#             joint_names_expr=["joint[1-2]"],
-#             effort_limit_sim=100.0,
-#             velocity_limit_sim=100.0,
-#             stiffness=10000.0,
-#             damping=100.0,
-#         ),
-#         "joint3_act": ImplicitActuatorCfg(
-#             joint_names_expr=["joint3"],
-#             effort_limit_sim=100.0,
-#             velocity_limit_sim=100.0,
-#             stiffness=10000.0,
-#             damping=100.0,
-#         ),
-#         "joint4_act": ImplicitActuatorCfg(
-#             joint_names_expr=["joint4"],
-#             effort_limit_sim=100.0,
-#             velocity_limit_sim=100.0,
-#             stiffness=10000.0,
-#             damping=100.0,
-#         ),
-#     },
-# )
 HUMANOID_EXO_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Robot",  # 环境中的路径
     spawn=sim_utils.UsdFileCfg(usd_path="/home/hy/isaacsim_assets/Assets/Isaac/4.5/Isaac/IsaacLab/Robots/Classic/Humanoid28Exo/humanoid_32_exo.usd",
@@ -100,21 +51,6 @@ HUMANOID_EXO_CFG = ArticulationCfg(
         joint_pos={".*": 0.0},  # 所有关节归零
     ),
     actuators={
-        # # 人体关节（驱动）
-        # "humanoid_joints": ImplicitActuatorCfg(
-        #     joint_names_expr=["^(?!exo_).*"],  # 匹配非 exo_ 开头的关节（如 right_hip）
-        #     effort_limit=400.0,
-        #     velocity_limit=100.0,
-        #     stiffness=0.0,      # 隐式执行器：用 PD 控制，不用 stiffness
-        #     damping=0.0,
-        # ),
-        # # 外骨骼关节（驱动）
-        # "exo_joints": ImplicitActuatorCfg(
-        #     joint_names_expr=["^exo_.*"],      # 匹配 exo_ 开头的关节
-        #     effort_limit=1000.0,
-        #     velocity_limit=100.0,
-        #     stiffness=0.0,
-        #     damping=0.0,
         "body": ImplicitActuatorCfg(
             joint_names_expr=[".*"],
             stiffness=None,
@@ -141,41 +77,76 @@ class NewRobotsSceneCfg(InteractiveSceneCfg):
     # Jetbot = JETBOT_CONFIG.replace(prim_path="{ENV_REGEX_NS}/Jetbot")
     # Dofbot = DOFBOT_CONFIG.replace(prim_path="{ENV_REGEX_NS}/Dofbot")
     robot = HUMANOID_EXO_CFG.replace(prim_path="{ENV_REGEX_NS}/robot")
+    
 
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     sim_dt = sim.get_physics_dt()
     sim_time = 0.0
     count = 0
 
-    print("Num DOFs:", len(scene['robot'].data.joint_names))
-    print(f"Number of DOFs (joints): {scene['robot'].joint_names}")
-    print("Num Bodies:", len(scene['robot'].data.body_names)) 
-    print(f"Number of Bodies: {scene['robot'].body_names}")
+    # ------------------------------------------------------------------
+    # 1. 打印一次关节/刚体信息（调试用）
+    # ------------------------------------------------------------------
+    robot = scene["robot"]
+    print("\n=== ROBOT INFO ===")
+    print("joint_names :", robot.data.joint_names)
+    print("body_names  :", robot.data.body_names)
+    print("=" * 50 + "\n")
 
-    # 预计算正弦波用于摆动
-    freq = 0.5  # Hz
-    amp = 0.5   # 弧度
+    # ------------------------------------------------------------------
+    # 2. 运动参数
+    # ------------------------------------------------------------------
+    # 站立不动时间（秒）
+    idle_time = 1.0
+    # 一次蹲起周期（秒），包括下蹲 + 站起
+    squat_cycle = 3.0
+    # 膝关节最大弯曲角度（rad），约 60°
+    knee_amp = 2
 
+    # 找到膝关节索引（一次性查找，提升性能）
+    knee_names = ["exo_left_knee", "exo_right_knee"]
+    knee_idx = []
+    num_dofs = len(robot.data.joint_names)
+    for name in knee_names:
+        if name in robot.data.joint_names:
+            knee_idx.append(robot.data.joint_names.index(name))
+        else:
+            knee_idx.append(None)
+            print(f"[WARN] Joint '{name}' not found!")
+
+    # ------------------------------------------------------------------
+    # 3. 主循环
+    # ------------------------------------------------------------------
     while simulation_app.is_running():
-        # --- 每 500 步重置一次 ---
-        if count % 500 == 0:
+        # ------------------- 重置 -------------------
+        if count % int(5.0 / sim_dt) == 0:          # 每 5 s 重置一次
             count = 0
             scene.reset()
-            print("[INFO]: Resetting robot...")
+            print("[INFO]: Resetting robot to default pose...")
 
-        # --- 控制人体髋关节摆动（模拟走路）---
-        if "right_thigh_y" in scene["robot"].data.joint_names:
-            # 获取关节索引
-            idx = scene["robot"].data.joint_names.index("right_thigh_y")
-            target_pos = amp * np.sin(2 * np.pi * freq * sim_time)
-            action = torch.zeros(1, scene["robot"].num_dofs, device=sim.device)
-            action[0, idx] = target_pos
-            scene["robot"].set_joint_position_target(action)
+        # ------------------- 计算目标膝角 -------------------
+        phase = sim_time % squat_cycle          # 0 ~ squat_cycle
 
-        # --- 外骨骼关节：不控制，靠 D6 弹簧跟随 ---
-        # 什么都不写 → 靠 USD 中的 Drive 自动回中
+        if phase < idle_time:
+            # 站立不动
+            target_knee = 0.0
+        else:
+            # 余弦波 → 平滑下蹲 & 站起
+            t = (phase - idle_time) / (squat_cycle - idle_time)   # 0~1
+            target_knee = knee_amp * (0.5 - np.cos(np.pi * t)) / 2.0
 
-        # --- 仿真步进 ---
+        # ------------------- 构造动作向量 -------------------
+        action = torch.zeros(1, num_dofs, device=sim.device)
+
+        for idx in knee_idx:
+            if idx is not None:
+                action[0, idx] = target_knee
+
+        # 其它关节保持默认（0 rad），防止漂移
+        # （如果 USD 中有非零默认角度，可在这里写 default_joint_pos）
+        robot.set_joint_position_target(action)
+
+        # ------------------- 仿真步进 -------------------
         scene.write_data_to_sim()
         sim.step()
         scene.update(sim_dt)
@@ -184,69 +155,11 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         count += 1
 
 
-# def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
-#     sim_dt = sim.get_physics_dt()
-#     sim_time = 0.0
-#     count = 0
-
-#     while simulation_app.is_running():
-#         # reset
-#         if count % 500 == 0:
-#             # reset counters
-#             count = 0
-#             # reset the scene entities to their initial positions offset by the environment origins
-#             root_jetbot_state = scene["Jetbot"].data.default_root_state.clone()
-#             root_jetbot_state[:, :3] += scene.env_origins
-#             root_dofbot_state = scene["Dofbot"].data.default_root_state.clone()
-#             root_dofbot_state[:, :3] += scene.env_origins
-
-#             # copy the default root state to the sim for the jetbot's orientation and velocity
-#             scene["Jetbot"].write_root_pose_to_sim(root_jetbot_state[:, :7])
-#             scene["Jetbot"].write_root_velocity_to_sim(root_jetbot_state[:, 7:])
-#             scene["Dofbot"].write_root_pose_to_sim(root_dofbot_state[:, :7])
-#             scene["Dofbot"].write_root_velocity_to_sim(root_dofbot_state[:, 7:])
-
-#             # copy the default joint states to the sim
-#             joint_pos, joint_vel = (
-#                 scene["Jetbot"].data.default_joint_pos.clone(),
-#                 scene["Jetbot"].data.default_joint_vel.clone(),
-#             )
-#             scene["Jetbot"].write_joint_state_to_sim(joint_pos, joint_vel)
-#             joint_pos, joint_vel = (
-#                 scene["Dofbot"].data.default_joint_pos.clone(),
-#                 scene["Dofbot"].data.default_joint_vel.clone(),
-#             )
-#             scene["Dofbot"].write_joint_state_to_sim(joint_pos, joint_vel)
-#             # clear internal buffers
-#             scene.reset()
-#             print("[INFO]: Resetting Jetbot and Dofbot state...")
-
-#         # drive around
-#         if count % 100 < 75:
-#             # Drive straight by setting equal wheel velocities
-#             action = torch.Tensor([[10.0, 10.0]])
-#         else:
-#             # Turn by applying different velocities
-#             action = torch.Tensor([[5.0, -5.0]])
-
-#         scene["Jetbot"].set_joint_velocity_target(action)
-
-#         # wave
-#         wave_action = scene["Dofbot"].data.default_joint_pos
-#         wave_action[:, 0:4] = 0.25 * np.sin(2 * np.pi * 0.5 * sim_time)
-#         scene["Dofbot"].set_joint_position_target(wave_action)
-
-#         scene.write_data_to_sim()
-#         sim.step()
-#         sim_time += sim_dt
-#         count += 1
-#         scene.update(sim_dt)
-
-
 def main():
     """Main function."""
+
     # Initialize the simulation context
-    sim_cfg = sim_utils.SimulationCfg(device=args_cli.device)
+    sim_cfg = sim_utils.SimulationCfg(device=args_cli.device, gravity=(0.0, 0.0, 0.0))
     sim = sim_utils.SimulationContext(sim_cfg)
     sim.set_camera_view([3.5, 0.0, 3.2], [0.0, 0.0, 0.5])
     # Design scene
