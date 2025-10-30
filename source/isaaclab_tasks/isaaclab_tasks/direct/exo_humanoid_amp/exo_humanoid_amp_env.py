@@ -418,7 +418,8 @@ def compute_reward(
 
     total_power = 0.3 * power_upper + 0.4 * power_human_lower + 0.3 * power_exo_lower
     
-    # 除以1000是为了缩放功率值，避免奖励过小
+    # 缩放功率，避免奖励过小(以力矩为100左右，具体需调整模型力矩限制)
     reward = 1.0 / (total_power / 1000.0 + 1.0)
     
     return reward
+

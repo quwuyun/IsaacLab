@@ -2,4 +2,10 @@
 ./isaaclab.sh -p scripts/reinforcement_learning/skrl/train.py --task Isaac-Exo-Humanoid-AMP-Walk-Direct-v0 --algorithm AMP --num_envs 4096
 
 测试
-./isaaclab.sh -p scripts/reinforcement_learning/skrl/play.py --task Isaac-Exo-Humanoid-AMP-Walk-Direct-v0 --algorithm AMP --num_envs 1 --checkpoint logs/skrl/exo_humanoid_amp_walk/2025-10-29_17-32-20_amp_torch/checkpoints/agent_80000.pt
+./isaaclab.sh -p scripts/reinforcement_learning/skrl/play.py --task Isaac-Exo-Humanoid-AMP-Walk-Direct-v0 --algorithm AMP --num_envs 1 \
+--checkpoint logs/skrl/exo_humanoid_amp_walk/2025-10-29_17-32-20_amp_torch/checkpoints/agent_80000.pt
+
+绘图
+python ./source/isaaclab_tasks/isaaclab_tasks/direct/exo_humanoid_amp/torque_logs/plot.py \
+--log_file ./source/isaaclab_tasks/isaaclab_tasks/direct/exo_humanoid_amp/torque_logs/torque_20251030_185409.csv \
+--data_type velocity --joints vel_exo_right_hip:1 vel_right_hip_y
