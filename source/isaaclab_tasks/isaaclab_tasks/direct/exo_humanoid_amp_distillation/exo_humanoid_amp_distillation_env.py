@@ -15,7 +15,7 @@ from isaaclab.envs import DirectRLEnv  # isaaclab环境基类
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import quat_apply
 
-from .exo_humanoid_amp_env_cfg import ExoHumanoidAmpEnvCfg  # 环境配置类
+from .exo_humanoid_amp_distillation_env_cfg import ExoHumanoidAmpDistillationEnvCfg  # 环境配置类
 from .motions import MotionLoader
 
 import time
@@ -23,10 +23,10 @@ import os
 import csv
 
 
-class ExoHumanoidAmpEnv(DirectRLEnv):
-    cfg: ExoHumanoidAmpEnvCfg
+class ExoHumanoidAmpDistillationEnv(DirectRLEnv):
+    cfg: ExoHumanoidAmpDistillationEnvCfg
 
-    def __init__(self, cfg: ExoHumanoidAmpEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: ExoHumanoidAmpDistillationEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
         print("Joint names:", self.robot.data.joint_names)
@@ -151,16 +151,17 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
 
     def _get_observations(self) -> dict:
         # build task observation
-        obs = compute_obs(
-            self.robot.data.joint_pos,  # dof角度1*39
-            self.robot.data.joint_vel,  # dof角速度1*39
-            self.robot.data.body_pos_w[:, self.ref_body_index],  # torso位置1*3 --->1*1高度
-            self.robot.data.body_quat_w[:, self.ref_body_index],  # torso四元数1*4 --->1*6投影基
-            self.robot.data.body_lin_vel_w[:, self.ref_body_index],  # torso线速度1*3
-            self.robot.data.body_ang_vel_w[:, self.ref_body_index],  # torso角速度1*3
-            self.robot.data.body_pos_w[:, self.key_body_indexes],  # 关键刚体位置4*3
-        )
-        print("速度", self.robot.data.body_lin_vel_w[:, self.ref_body_index])
+        if self.cfg.is_distillation:
+            # 在蒸馏环境中，去掉线速度
+            obs = compute_obs(
+                self.robot.data.joint_pos,  # dof角度1*39
+                self.robot.data.joint_vel,  # dof角速度1*39
+                self.robot.data.body_pos_w[:, self.ref_body_index],  # torso位置1*3 --->1*1高度
+                self.robot.data.body_quat_w[:, self.ref_body_index],  # torso四元数1*4 --->1*6投影基
+                self.robot.data.body_lin_vel_w[:, self.ref_body_index],  # torso线速度1*3
+                self.robot.data.body_ang_vel_w[:, self.ref_body_index],  # torso角速度1*3
+                self.robot.data.body_pos_w[:, self.key_body_indexes],  # 关键刚体位置4*3
+            )
 
         # update AMP observation history
         for i in reversed(range(self.cfg.num_amp_observations - 1)):
@@ -172,8 +173,8 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         self.amp_observation_buffer[:, 0] = torch.cat([
             obs[:, self.human_dof_indices],  # 28dof在39dof的关节位置索引
             obs[:, human_joint_vel_indices],
-            obs[:, 78:103]
-            ], dim=-1)  # torso和关键刚体位置
+            obs[:, 78:100],  # 学生78:100,教师策略为78:103,torso和手脚相对pelvis位置
+            ], dim=-1)
         self.extras = {"amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)}  # 扁平化AMP观测值供判别器使用
 
         # 储存关节力矩信息
@@ -302,12 +303,12 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
             body_angular_velocities,
         ) = self._motion_loader.sample(num_samples=num_samples, times=times)
         # compute AMP observation
-        amp_observation = compute_obs(
+        amp_observation = compute_student_obs(
             dof_positions[:, self.motion_human_dof_indexes],  # 只使用人体关节位置
             dof_velocities[:, self.motion_human_dof_indexes],
             body_positions[:, self.motion_ref_body_index],
             body_rotations[:, self.motion_ref_body_index],
-            body_linear_velocities[:, self.motion_ref_body_index],
+            body_linear_velocities[:, self.motion_ref_body_index],  # 线速度
             body_angular_velocities[:, self.motion_ref_body_index],
             body_positions[:, self.motion_key_body_indexes],
         )
@@ -379,7 +380,32 @@ def compute_obs(
             dof_velocities,
             root_positions[:, 2:3],  # root body height
             quaternion_to_tangent_and_normal(root_rotations),  # 6
-            root_linear_velocities,
+            root_linear_velocities,  # 输出去除线速度
+            root_angular_velocities,
+            (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),
+        ),
+        dim=-1,
+    )
+    return obs
+
+
+@torch.jit.script
+def compute_student_obs(
+    dof_positions: torch.Tensor,
+    dof_velocities: torch.Tensor,
+    root_positions: torch.Tensor,
+    root_rotations: torch.Tensor,
+    root_linear_velocities: torch.Tensor,
+    root_angular_velocities: torch.Tensor,
+    key_body_positions: torch.Tensor,
+) -> torch.Tensor:
+    obs = torch.cat(
+        (
+            dof_positions,
+            dof_velocities,
+            root_positions[:, 2:3],  # root body height
+            quaternion_to_tangent_and_normal(root_rotations),  # 6
+            # root_linear_velocities,  # 输出去除线速度
             root_angular_velocities,
             (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),
         ),

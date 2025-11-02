@@ -29,3 +29,4 @@ from .unitree import *
 from .universal_robots import *
 
 from .humanoid_28_exo import *
+from .humanoid_28_exo_distillation import *
