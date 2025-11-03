@@ -16,7 +16,7 @@ class ExoHumanoidPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     experiment_name = "exo_humanoid_distillation"
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
-        actor_obs_normalization=True,
+        actor_obs_normalization=True,  # 启用观测归一化
         critic_obs_normalization=True,
         actor_hidden_dims=[1024, 512],
         critic_hidden_dims=[1024, 512],

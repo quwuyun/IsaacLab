@@ -23,7 +23,6 @@ import os
 import csv
 
 
-# 手动实现轻量MLP（替代RSL-RL的MLP模块）
 class SimpleMLP(torch.nn.Module):
     def __init__(self, input_dim: int, output_dim: int, hidden_dims: list[int], activation: str = "relu"):
         super().__init__()
@@ -134,7 +133,7 @@ class ExoHumanoidDistillationEnv(DirectRLEnv):
     def _load_teacher_policy(self):
         """加载SKRL训练的教师模型（跨框架适配：权重转换+维度对齐）"""
         try:
-            # 1. 手动构建教师网络（与SKRL结构完全一致：103→1024→512→39）
+            # 手动构建教师网络（与SKRL结构一致：103→1024→512→39）
             self.teacher_actor = SimpleMLP(
                 input_dim=self.cfg.teacher_obs_dim,  # 103维（SKRL输入）
                 output_dim=39,    # 39维（与学生动作一致）
@@ -142,7 +141,7 @@ class ExoHumanoidDistillationEnv(DirectRLEnv):
                 activation="relu"                    # 对齐SKRL的激活函数
             ).to(self.device)
 
-            # 2. 加载SKRL权重并转换（解决跨框架键不匹配）
+            # 加载SKRL权重并转换（解决跨框架键不匹配）
             checkpoint = torch.load(self.cfg.teacher_policy_path, map_location=self.device)
             skrl_weights = checkpoint["policy"]  # SKRL的权重存在"policy"键下
             
@@ -155,16 +154,16 @@ class ExoHumanoidDistillationEnv(DirectRLEnv):
                     converted_key = key.replace("net_container.", "layers.")
                     converted_weights[converted_key] = value
 
-            # 3. 加载转换后的权重（strict=False忽略无关键）
+            # 加载转换后的权重（strict=False忽略无关键）
             self.teacher_actor.load_state_dict(converted_weights, strict=False)
             
-            # 4. 冻结教师网络（仅用于生成参考动作，不更新）
+            # 冻结教师网络（仅用于生成参考动作，不更新）
             for param in self.teacher_actor.parameters():
                 param.requires_grad = False
             self.teacher_actor.eval()
             print(f"[INFO] SKRL教师模型加载成功！路径：{self.cfg.teacher_policy_path}")
 
-            # 5. 加载SKRL的观测归一化器（保持观测分布一致）
+            # 加载SKRL的观测归一化器（保持观测分布一致）
             normalizer_path = os.path.join(
                 os.path.dirname(self.cfg.teacher_policy_path),
                 "../obs_normalizer.pth"  # SKRL默认归一化器路径（checkpoints同级目录）
@@ -396,7 +395,7 @@ def compute_teacher_obs(
             dof_velocities,  # 39维关节速度
             root_positions[:, 2:3],  # 1维躯干高度
             quaternion_to_tangent_and_normal(root_rotations),  # 6维四元数投影
-            root_linear_velocities,  # 3维躯干线速度（教师保留，学生剔除）
+            root_linear_velocities,  # 3维躯干线速度（教师保留）
             root_angular_velocities,  # 3维躯干角速度
             (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),  # 12维关键体相对位置
         ),
