@@ -40,7 +40,6 @@ def load_actor_model(model_path, device):
                 actor_weights[new_key] = value
     else:
         for key, value in checkpoint.items():
-            # 原始键："0.weight" → 加上"layers." → "layers.0.weight"
             new_key = f"layers.{key}"
             actor_weights[new_key] = value
     
@@ -56,8 +55,8 @@ def preprocess_input(random_data, obs_mean, obs_std, device):
     # 转换为torch张量并添加批次维度 [1, 100]
     data = torch.tensor(random_data, dtype=torch.float32).unsqueeze(0)
     data = data.to(device)
-    # 应用归一化：(x - mean) / std（必须和训练时的mean/std一致）
-    normalized_data = (data - obs_mean) / (obs_std + 1e-6)  # 加小值避免除零
+    # 应用归一化：(x - mean) / std（和训练时的mean/std一致）
+    normalized_data = (data - obs_mean) / (obs_std + 1e-6)
     return normalized_data
 
 
