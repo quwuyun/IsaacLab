@@ -19,7 +19,8 @@ from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
 HUMANOID_28_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Robot",
     spawn=sim_utils.UsdFileCfg(
-        usd_path=f"{ISAACLAB_NUCLEUS_DIR}/Robots/Classic/Humanoid28/humanoid_28.usd",
+        # usd_path=f"{ISAACLAB_NUCLEUS_DIR}/Robots/Classic/Humanoid28/humanoid_28.usd",
+        usd_path="/home/hy/isaacsim_assets/Assets/Isaac/4.5/Isaac/IsaacLab/Robots/Classic/Humanoid28/humanoid_28.usd",
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=None,
             max_depenetration_velocity=10.0,

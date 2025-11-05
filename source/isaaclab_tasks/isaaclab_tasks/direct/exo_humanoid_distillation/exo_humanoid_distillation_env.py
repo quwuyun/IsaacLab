@@ -250,6 +250,10 @@ class ExoHumanoidDistillationEnv(DirectRLEnv):
             self.exo_dof_indices
         )
 
+        foward_vel = self.robot.data.body_lin_vel_w[:, self.ref_body_index, 0]
+        target_vel = 1.2
+        vel_reward = torch.exp(-5.0 * torch.square(foward_vel - target_vel))
+
         distill_reward = torch.zeros_like(power_reward)
         if self.cfg.is_distillation and self.teacher_actor is not None and self.teacher_obs is not None:
             # 生成教师参考动作（无梯度）
@@ -263,9 +267,9 @@ class ExoHumanoidDistillationEnv(DirectRLEnv):
             
             # 计算MSE：学生动作与教师动作的差异（差异越小，奖励越大）
             action_mse = torch.mean(torch.square(self.actions - teacher_actions), dim=1)
-            distill_reward = torch.exp(-5.0 * action_mse)
+            distill_reward = torch.exp(-1 * action_mse)
 
-        reward = 0.1 * power_reward + 0.9 * distill_reward
+        reward = 0.0 * power_reward + 0.3 * distill_reward + 0.7 * vel_reward
 
         return reward
 
@@ -273,7 +277,8 @@ class ExoHumanoidDistillationEnv(DirectRLEnv):
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         time_out = self.episode_length_buf >= self.max_episode_length - 1
         if self.cfg.early_termination:
-            died = self.robot.data.body_pos_w[:, self.ref_body_index, 2] < self.cfg.termination_height
+            # died = self.robot.data.body_pos_w[:, self.ref_body_index, 2] < self.cfg.termination_height
+            died = (self.robot.data.body_pos_w[:, self.ref_body_index, 2] < self.cfg.termination_height) | (self.robot.data.body_pos_w[:, self.ref_body_index, 2] > 1.5)
         else:
             died = torch.zeros_like(time_out)
         return died, time_out

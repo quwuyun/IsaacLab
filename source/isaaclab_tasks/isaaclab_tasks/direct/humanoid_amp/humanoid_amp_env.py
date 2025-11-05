@@ -18,6 +18,9 @@ from isaaclab.utils.math import quat_apply
 from .humanoid_amp_env_cfg import HumanoidAmpEnvCfg
 from .motions import MotionLoader
 
+import time
+import os
+import csv
 
 class HumanoidAmpEnv(DirectRLEnv):
     cfg: HumanoidAmpEnvCfg
@@ -25,6 +28,10 @@ class HumanoidAmpEnv(DirectRLEnv):
     def __init__(self, cfg: HumanoidAmpEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
+        print("Joint names:", self.robot.data.joint_names)
+        print("Body names:", self.robot.data.body_names)
+        print("Num DOFs:", len(self.robot.data.joint_names))
+        print("Num DOFs:", len(self.robot.data.body_names))
         # action offset and scale
         dof_lower_limits = self.robot.data.soft_joint_pos_limits[0, :, 0]
         dof_upper_limits = self.robot.data.soft_joint_pos_limits[0, :, 1]
@@ -33,6 +40,13 @@ class HumanoidAmpEnv(DirectRLEnv):
 
         # load motion
         self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
+
+        self.HUMAN_LOWER_JOINTS = ['right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 
+                                   'right_knee', 'left_knee', 'right_ankle_x', 'right_ankle_y', 'right_ankle_z', 'left_ankle_x', 'left_ankle_y', 'left_ankle_z']
+        self.human_lower_dof_indices = [self.robot.data.joint_names.index(name) for name in self.HUMAN_LOWER_JOINTS]
+        self.HUMAN_UPPER_JOINTS = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'neck_x', 'neck_y', 'neck_z', 'right_shoulder_x', 'right_shoulder_y', 'right_shoulder_z', 
+                                'right_elbow', 'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'left_elbow']
+        self.human_upper_dof_indices = [self.robot.data.joint_names.index(name) for name in self.HUMAN_UPPER_JOINTS]
 
         # DOF and key body indexes
         key_body_names = ["right_hand", "left_hand", "right_foot", "left_foot"]
@@ -48,6 +62,35 @@ class HumanoidAmpEnv(DirectRLEnv):
         self.amp_observation_buffer = torch.zeros(
             (self.num_envs, self.cfg.num_amp_observations, self.cfg.amp_observation_space), device=self.device
         )
+
+        # --------------------------------------
+        # 力矩日志
+        # --------------------------------------
+        self.log_torque = True  # 控制是否记录力矩（可在配置文件中设置）
+        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/humanoid_amp/torque_logs"
+        self.torque_log_file = None  # 日志文件对象
+        self.torque_writer = None
+        self.timestep = 0
+
+        # 仅在仿真模式（有渲染）时启动日志（不影响训练）
+        is_simulation = self.num_envs == 1 or render_mode is not None
+        if self.log_torque and is_simulation:
+            os.makedirs(self.torque_log_dir, exist_ok=True)
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            self.torque_log_path = f"{self.torque_log_dir}/torque_{timestamp}.csv"
+            try:
+                self.torque_log_file = open(self.torque_log_path, "w", newline="", encoding="utf-8")
+                self.torque_writer = csv.writer(self.torque_log_file)
+                headers = ["timestamp", "timestep"] + self.robot.data.joint_names + [f"pos_{name}" for name in self.HUMAN_LOWER_JOINTS] + [f"vel_{name}" for name in self.HUMAN_LOWER_JOINTS]  + [f"action_{name}" for name in self.HUMAN_LOWER_JOINTS]
+                self.torque_writer.writerow(headers)
+                print(f"[INFO] 力矩日志启动成功！保存至：{self.torque_log_path}")
+            except Exception as e:
+                print(f"[ERROR] 日志文件创建失败：{e}")
+                self.log_torque = False  # 创建失败则关闭日志
+
+        if self.log_torque:
+            self.sim.add_physics_callback("torque_log_callback", self._record_data)
+            print("[INFO] 仿真回调绑定成功，将每帧记录力矩数据")
 
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot)
@@ -103,7 +146,17 @@ class HumanoidAmpEnv(DirectRLEnv):
         return {"policy": obs}
 
     def _get_rewards(self) -> torch.Tensor:
-        return torch.ones((self.num_envs,), dtype=torch.float32, device=self.sim.device)
+        # return torch.ones((self.num_envs,), dtype=torch.float32, device=self.sim.device)
+        joint_torques = self.robot.data.applied_torque  # (num_envs, num_dofs)
+        joint_vels = self.robot.data.joint_vel          # (num_envs, num_dofs)
+        
+        reward = compute_reward(
+            joint_torques,
+            joint_vels,
+            self.human_upper_dof_indices,
+            self.human_lower_dof_indices,
+        )
+        return reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         time_out = self.episode_length_buf >= self.max_episode_length - 1
@@ -204,6 +257,44 @@ class HumanoidAmpEnv(DirectRLEnv):
             body_positions[:, self.motion_key_body_indexes],
         )
         return amp_observation.view(-1, self.amp_observation_size)
+    
+    def _record_data(self, dt: float):
+        """由仿真回调调用，每帧记录力矩数据"""
+        if not self.log_torque or self.torque_writer is None:
+            return
+        try:
+            if not hasattr(self.robot.data, "applied_torque") or self.robot.data.applied_torque is None:
+                if self.timestep % 100 == 0:
+                    print("[WARNING] applied_torque未初始化,暂不记录")
+                self.timestep += 1
+                return
+            # 取第一个环境的力矩数据
+            torque_data = self.robot.data.applied_torque[0].cpu().numpy()
+            joint_pos = self.robot.data.joint_pos[0].cpu()
+            human_lower_pos = joint_pos[self.human_lower_dof_indices].cpu().numpy()
+            joint_vels = self.robot.data.joint_vel[0].cpu()
+            human_lower_vels = joint_vels[self.human_lower_dof_indices].cpu().numpy()
+            timestamp = self.sim.current_time
+            actions_lower = self.actions[0, 14:].cpu().numpy()
+
+            log_row = [timestamp, self.timestep] + torque_data.tolist() + human_lower_pos.tolist() + human_lower_vels.tolist() + actions_lower.tolist()
+            self.torque_writer.writerow(log_row)
+
+            # 每100帧打印进度
+            if self.timestep % 100 == 0:
+                print(f"[INFO] 已记录{self.timestep}步力矩数据，当前时间：{timestamp:.2f}s")
+            self.timestep += 1
+        except Exception as e:
+            print(f"[ERROR] 力矩记录失败：{e}")
+
+    def close(self):
+        # 关闭日志文件（确保数据写入）
+        if self.torque_log_file is not None:
+            self.torque_writer = None
+            self.torque_log_file.close()
+            print(f"[INFO] 力矩日志已关闭，保存至：{self.torque_log_path}，共记录{self.timestep}步")
+        # 调用父类关闭方法
+        super().close()
 
 
 @torch.jit.script
@@ -240,3 +331,35 @@ def compute_obs(
         dim=-1,
     )
     return obs
+
+@torch.jit.script
+def compute_reward(
+    joint_torques: torch.Tensor,
+    joint_vels: torch.Tensor,
+    human_upper_dof_indices: list[int],
+    human_lower_dof_indices: list[int],
+) -> torch.Tensor:
+    """
+    计算基于关节功率的奖励函数（功率 = 力矩 * 角速度，取绝对值）
+    
+    参数:
+        joint_torques: 所有关节的力矩 (num_envs, num_dofs)
+        joint_vels: 所有关节的角速度 (num_envs, num_dofs)
+        human_upper_indices: 人体上肢关节的索引(list[int])
+        human_lower_indices: 人体下肢关节的索引(list[int])
+        exo_lower_indices: 外骨骼下肢关节的索引(list[int])
+    """
+    torque_upper = joint_torques[:, human_upper_dof_indices]
+    vel_upper = joint_vels[:, human_upper_dof_indices]
+    torque_human_lower = joint_torques[:, human_lower_dof_indices]
+    vel_human_lower = joint_vels[:, human_lower_dof_indices]
+
+    power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)  # (num_envs,)
+    power_lower = torch.sum(torch.abs(torque_human_lower * vel_human_lower), dim=1)
+
+    total_power = 0.3 * power_upper + 0.7 * power_lower
+    
+    # 缩放功率，避免奖励过小(以力矩为100左右，具体需调整模型力矩限制)
+    reward = 1.0 / (total_power / 1000.0 + 1.0)
+    
+    return reward

@@ -21,6 +21,8 @@ from .motions import MotionLoader
 import time
 import os
 import csv
+from torch.utils.tensorboard import SummaryWriter
+import datetime
 
 
 class ExoHumanoidAmpEnv(DirectRLEnv):
@@ -116,6 +118,17 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
             print("[INFO] 仿真回调绑定成功，将每帧记录力矩数据")
 
 
+        # tensorboard创建一个新的e
+        time_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.writer1 = SummaryWriter(log_dir=os.path.join(
+            self.cfg.get("log_dir", "/home/hy/文档/RL/IsaacGymEnvs-exo/isaacgymenvs/runs/tensorboard"),
+            "env_" + str(os.getpid()) + str(time_str)))
+        self.env_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境已完成的episode数
+        self.env_current_ep_reward = np.zeros(self.num_envs, dtype=np.float32)  # 每个环境当前episode的累积奖励
+        self.global_step = 0  # 全局训练步数（每步训练递增）
+        self.total_episodes = 0  # 所有环境累计完成的episode总数
+
+
     # 设置模拟场景
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot)  # 初始化机器人
@@ -160,7 +173,7 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
             self.robot.data.body_ang_vel_w[:, self.ref_body_index],  # torso角速度1*3
             self.robot.data.body_pos_w[:, self.key_body_indexes],  # 关键刚体位置4*3
         )
-        print("速度", self.robot.data.body_lin_vel_w[:, self.ref_body_index])
+        # print("速度", self.robot.data.body_lin_vel_w[:, self.ref_body_index])
 
         # update AMP observation history
         for i in reversed(range(self.cfg.num_amp_observations - 1)):
@@ -314,6 +327,62 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         return amp_observation.view(-1, self.amp_observation_size)  # AMP参考数据amp_observation
     
 
+    # tensorboard
+    # --------------------------
+    # 重写step方法：触发奖励记录（核心补充）
+    # --------------------------
+    def step(self, actions: torch.Tensor) -> tuple[dict, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
+        # 调用父类step获取核心数据（obs, rewards, terminated, truncated, info）
+        obs, rewards, terminated, truncated, info = super().step(actions)
+        
+        # 合并终止条件（倒地=terminated，超时=truncated）
+        done = terminated | truncated
+        # 记录奖励并更新TensorBoard
+        self._update_tensorboard(rewards, done)
+        
+        return obs, rewards, terminated, truncated, info
+
+    # --------------------------
+    # 完善TensorBoard更新逻辑（修正）
+    # --------------------------
+    def _update_tensorboard(self, rewards: torch.Tensor, done: torch.Tensor):
+        # 1. 将torch奖励张量转换为numpy（适配累积逻辑）
+        rewards_np = rewards.detach().cpu().numpy()
+        
+        # 2. 累积每个环境的当前episode奖励
+        self.env_current_ep_reward += rewards_np
+        
+        # 3. 记录每步的平均奖励（实时监控训练趋势）
+        step_mean_reward = rewards_np.mean()
+        self.writer1.add_scalar("实时奖励/每步平均奖励", step_mean_reward, self.global_step)
+        self.global_step += 1
+        
+        # 4. 处理已完成的episode（done=True的环境）
+        done_env_ids = np.where(done.cpu().numpy())[0]  # 获取所有完成episode的环境索引
+        if len(done_env_ids) > 0:
+            for env_id in done_env_ids:
+                # 记录单个环境的episode奖励
+                ep_reward = self.env_current_ep_reward[env_id]
+                self.writer1.add_scalar(f"单个环境奖励/环境{env_id}", ep_reward, self.env_episode_count[env_id])
+                
+                # 更新计数
+                self.env_episode_count[env_id] += 1
+                self.total_episodes += 1
+                
+                # 重置当前环境的累积奖励
+                self.env_current_ep_reward[env_id] = 0.0
+            
+            # 记录所有环境的平均episode奖励（每完成一个episode更新）
+            recent_ep_rewards = []
+            for env_id in range(self.num_envs):
+                if self.env_episode_count[env_id] > 0:
+                    # 取每个环境最近1个episode的奖励（可调整为最近N个求平均）
+                    recent_ep_rewards.append(self.env_current_ep_reward[env_id] if not done[env_id] else 0.0)
+            if recent_ep_rewards:
+                avg_ep_reward = np.mean(recent_ep_rewards)
+                self.writer1.add_scalar("平均奖励/所有环境episode平均", avg_ep_reward, self.total_episodes)
+
+
     def _record_data(self, dt: float):
         """由仿真回调调用，每帧记录力矩数据"""
         if not self.log_torque or self.torque_writer is None:
@@ -342,6 +411,7 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
             print(f"[ERROR] 力矩记录失败：{e}")
 
     def close(self):
+        self.writer1.close()
         # 关闭日志文件（确保数据写入）
         if self.torque_log_file is not None:
             self.torque_writer = None
@@ -417,7 +487,7 @@ def compute_reward(
     power_human_lower = torch.sum(torch.abs(torque_human_lower * vel_human_lower), dim=1)
     power_exo_lower = torch.sum(torch.abs(torque_exo_lower * vel_exo_lower), dim=1)
 
-    total_power = 0.3 * power_upper + 0.4 * power_human_lower + 0.3 * power_exo_lower
+    total_power = 0.1 * power_upper + 0.6 * power_human_lower + 0.3 * power_exo_lower
     
     # 缩放功率，避免奖励过小(以力矩为100左右，具体需调整模型力矩限制)
     reward = 1.0 / (total_power / 1000.0 + 1.0)

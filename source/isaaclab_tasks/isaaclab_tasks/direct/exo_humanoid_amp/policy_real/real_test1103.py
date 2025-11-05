@@ -63,7 +63,7 @@ def preprocess_input(random_data, obs_mean, obs_std, device):
 def main():
     MODEL_PATH = "/home/hy/IsaacLab/logs/rsl_rl/exo_humanoid_distillation/2025-11-02_20-31-58/model_0.pt"  # 你的训练模型路径
     
-    USE_GPU = True  # 使用GPU
+    USE_GPU = False  # 使用GPU
     device = torch.device("cuda" if (USE_GPU and torch.cuda.is_available()) else "cpu")
     print(f"使用设备: {device}")
     print(f"模型路径: {MODEL_PATH}")
@@ -91,6 +91,7 @@ def main():
     try:
         while True:
             # 模拟传感器输入
+            time1 = time.time()
             random_input = np.random.randn(100)  # 均值0、方差1的随机数据
             
             # 归一化
@@ -107,8 +108,10 @@ def main():
             print(f"外骨骼左膝关节action: {action_np[38].round(4)}")
             print(datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
             print("----------------------------------------")
-
-            time.sleep(0.1)
+            
+            # time.sleep(0.1)
+            time2 = time.time()
+            print(f"推理耗时: {(time2 - time1)*1000:.2f} ms\n")
     
     except KeyboardInterrupt:
         print("推理终止")
