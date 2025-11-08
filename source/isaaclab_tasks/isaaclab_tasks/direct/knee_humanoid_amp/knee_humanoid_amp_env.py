@@ -21,6 +21,8 @@ from .motions import MotionLoader
 import time
 import os
 import csv
+from torch.utils.tensorboard import SummaryWriter
+import datetime
 
 class KneeHumanoidAmpEnv(DirectRLEnv):
     cfg: KneeHumanoidAmpEnvCfg
@@ -103,6 +105,15 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
             self.sim.add_physics_callback("torque_log_callback", self._record_data)
             print("[INFO] 仿真回调绑定成功，将每帧记录力矩数据")
 
+        # 添加 TensorBoard writer
+        log_dir = os.path.join("runs/kneehumanamp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        self.writer1 = SummaryWriter(log_dir=log_dir)
+        self.max_episodes = 800  # horizon_length*max_epochs（总步数）
+        self.envs_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境各自的回合
+        self.episode_count = 0  # 同步完成回合数
+        self.episode_rewards = np.zeros(self.num_envs, dtype=np.float32)  # 回合总奖励(清零版)
+        self.envs_episode_rewards = np.zeros((self.num_envs, int(self.max_episodes)), dtype=np.float32)  # 存储每个环境的奖励
+        self.global_frame = 0  # 全局帧计数器
 
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot)
@@ -305,7 +316,54 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
         except Exception as e:
             print(f"[ERROR] 力矩记录失败：{e}")
 
+    def step(self, action: torch.Tensor):
+        observations, rewards, terminated, truncated, extras = super().step(action)
+
+        rew_buf = rewards.detach().cpu().numpy() if rewards.requires_grad else rewards.cpu().numpy()
+
+        reset_buf = terminated | truncated
+        done_env_ids = reset_buf.nonzero(as_tuple=False).flatten()   # <-- 完全等价于你原来的 self.reset_buf
+
+        self.tensorboard_rew(rew_buf, done_env_ids)
+
+        if "amp_obs" in extras:
+            amp_std = extras["amp_obs"].std().item()
+            self.writer1.add_scalar("AMP/obs_std", amp_std, self.global_frame)
+
+        return observations, rewards, terminated, truncated, extras
+    
+
+    def tensorboard_rew(self, rew_buf, done_env_ids):
+        rewards_np = rew_buf.detach().cpu().numpy() if hasattr(rew_buf, "detach") else rew_buf
+        self.episode_rewards += rewards_np
+
+        mean_cumulative_reward = self.episode_rewards.mean()  # 所有环境当前帧平均回合奖励
+        self.writer1.add_scalar("reward/frame", mean_cumulative_reward, self.global_frame)
+        self.global_frame += 1
+
+        for env_id in done_env_ids:
+            ep_reward = self.episode_rewards[env_id]  # 完成回合的环境当前回合总奖励
+            self.envs_episode_rewards[env_id, self.envs_episode_count[env_id]] = ep_reward
+
+            if env_id < 10:
+                self.writer1.add_scalar(f"reward/episode_env{env_id}", ep_reward, self.envs_episode_count[env_id])
+
+            self.episode_rewards[env_id] = 0.0
+            self.envs_episode_count[env_id] += 1
+
+        # 完成某回合所有环境平均奖励
+        min_episodes = self.envs_episode_count.min()
+        while self.episode_count < min_episodes:
+            mean_reward = self.envs_episode_rewards[:self.num_envs, self.episode_count].mean()
+            self.writer1.add_scalar("reward/episode_mean", mean_reward, self.episode_count)
+            self.episode_count += 1
+
     def close(self):
+        # 关闭 TensorBoard writer
+        if hasattr(self, 'writer'):
+            self.writer1.close()
+            print("[INFO] TensorBoard writer 已关闭")
+
         # 关闭日志文件（确保数据写入）
         if self.torque_log_file is not None:
             self.torque_writer = None
