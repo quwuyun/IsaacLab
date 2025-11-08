@@ -21,12 +21,29 @@ from .motions import MotionLoader
 import time
 import os
 import csv
+from torch.utils.tensorboard import SummaryWriter
+import datetime
+
 
 class HumanoidAmpEnv(DirectRLEnv):
     cfg: HumanoidAmpEnvCfg
 
     def __init__(self, cfg: HumanoidAmpEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
+
+        # 修改驱动刚度阻尼kp, kd
+        current_stiffness = self.robot.data.joint_stiffness.clone()  # (num_envs, num_joints)
+        current_damping = self.robot.data.joint_damping.clone()
+        print(f"初始刚度: {current_stiffness[0]}")
+        print(f"初始阻尼: {current_damping[0]}")
+        stiffness_scale = 1
+        damping_scale = 1
+        new_stiffness = current_stiffness * stiffness_scale
+        new_damping = current_damping * damping_scale
+        self.robot.write_joint_stiffness_to_sim(new_stiffness)
+        self.robot.write_joint_damping_to_sim(new_damping)
+        print(f"最终刚度: {self.robot.data.joint_stiffness[0]}")
+        print(f"最终阻尼: {self.robot.data.joint_damping[0]}")
 
         print("Joint names:", self.robot.data.joint_names)
         print("Body names:", self.robot.data.body_names)
@@ -37,6 +54,8 @@ class HumanoidAmpEnv(DirectRLEnv):
         dof_upper_limits = self.robot.data.soft_joint_pos_limits[0, :, 1]
         self.action_offset = 0.5 * (dof_upper_limits + dof_lower_limits)
         self.action_scale = dof_upper_limits - dof_lower_limits
+        print(f"动作下限: {dof_lower_limits}")
+        print(f"动作上限: {dof_upper_limits}")
 
         # load motion
         self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
@@ -45,8 +64,9 @@ class HumanoidAmpEnv(DirectRLEnv):
                                    'right_knee', 'left_knee', 'right_ankle_x', 'right_ankle_y', 'right_ankle_z', 'left_ankle_x', 'left_ankle_y', 'left_ankle_z']
         self.human_lower_dof_indices = [self.robot.data.joint_names.index(name) for name in self.HUMAN_LOWER_JOINTS]
         self.HUMAN_UPPER_JOINTS = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'neck_x', 'neck_y', 'neck_z', 'right_shoulder_x', 'right_shoulder_y', 'right_shoulder_z', 
-                                'right_elbow', 'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'left_elbow']
+                                'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'right_elbow', 'left_elbow']
         self.human_upper_dof_indices = [self.robot.data.joint_names.index(name) for name in self.HUMAN_UPPER_JOINTS]
+        print("Body masses:", self.robot.data.default_mass[0])
 
         # DOF and key body indexes
         key_body_names = ["right_hand", "left_hand", "right_foot", "left_foot"]
@@ -92,8 +112,19 @@ class HumanoidAmpEnv(DirectRLEnv):
             self.sim.add_physics_callback("torque_log_callback", self._record_data)
             print("[INFO] 仿真回调绑定成功，将每帧记录力矩数据")
 
+        # 添加 TensorBoard writer
+        log_dir = os.path.join("runs/humanamp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        self.writer1 = SummaryWriter(log_dir=log_dir)
+        self.max_episodes = 800  # horizon_length*max_epochs（总步数）
+        self.envs_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境各自的回合
+        self.episode_count = 0  # 同步完成回合数
+        self.episode_rewards = np.zeros(self.num_envs, dtype=np.float32)  # 回合总奖励(清零版)
+        self.envs_episode_rewards = np.zeros((self.num_envs, int(self.max_episodes)), dtype=np.float32)  # 存储每个环境的奖励
+        self.global_frame = 0  # 全局帧计数器
+
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot)
+
         # add ground plane
         spawn_ground_plane(
             prim_path="/World/ground",
@@ -156,6 +187,7 @@ class HumanoidAmpEnv(DirectRLEnv):
             self.human_upper_dof_indices,
             self.human_lower_dof_indices,
         )
+
         return reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -287,7 +319,55 @@ class HumanoidAmpEnv(DirectRLEnv):
         except Exception as e:
             print(f"[ERROR] 力矩记录失败：{e}")
 
+
+    def step(self, action: torch.Tensor):
+        observations, rewards, terminated, truncated, extras = super().step(action)
+
+        rew_buf = rewards.detach().cpu().numpy() if rewards.requires_grad else rewards.cpu().numpy()
+
+        reset_buf = terminated | truncated
+        done_env_ids = reset_buf.nonzero(as_tuple=False).flatten()   # <-- 完全等价于你原来的 self.reset_buf
+
+        self.tensorboard_rew(rew_buf, done_env_ids)
+
+        if "amp_obs" in extras:
+            amp_std = extras["amp_obs"].std().item()
+            self.writer1.add_scalar("AMP/obs_std", amp_std, self.global_frame)
+
+        return observations, rewards, terminated, truncated, extras
+    
+
+    def tensorboard_rew(self, rew_buf, done_env_ids):
+        rewards_np = rew_buf.detach().cpu().numpy() if hasattr(rew_buf, "detach") else rew_buf
+        self.episode_rewards += rewards_np
+
+        mean_cumulative_reward = self.episode_rewards.mean()  # 所有环境当前帧平均回合奖励
+        self.writer1.add_scalar("reward/frame", mean_cumulative_reward, self.global_frame)
+        self.global_frame += 1
+
+        for env_id in done_env_ids:
+            ep_reward = self.episode_rewards[env_id]  # 完成回合的环境当前回合总奖励
+            self.envs_episode_rewards[env_id, self.envs_episode_count[env_id]] = ep_reward
+
+            if env_id < 10:
+                self.writer1.add_scalar(f"reward/episode_env{env_id}", ep_reward, self.envs_episode_count[env_id])
+
+            self.episode_rewards[env_id] = 0.0
+            self.envs_episode_count[env_id] += 1
+
+        # 完成某回合所有环境平均奖励
+        min_episodes = self.envs_episode_count.min()
+        while self.episode_count < min_episodes:
+            mean_reward = self.envs_episode_rewards[:self.num_envs, self.episode_count].mean()
+            self.writer1.add_scalar("reward/episode_mean", mean_reward, self.episode_count)
+            self.episode_count += 1
+
     def close(self):
+        # 关闭 TensorBoard writer
+        if hasattr(self, 'writer'):
+            self.writer1.close()
+            print("[INFO] TensorBoard writer 已关闭")
+
         # 关闭日志文件（确保数据写入）
         if self.torque_log_file is not None:
             self.torque_writer = None

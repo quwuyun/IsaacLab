@@ -41,17 +41,19 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
         print(f"动作下限: {dof_lower_limits}")
         print(f"动作上限: {dof_upper_limits}")
 
-        self.exo_scale_ratio = 0.3  # 外骨骼动作缩放比例
+        self.exo_scale_ratio = 1.0  # 外骨骼动作缩放比例
         self.exo_action_scale = (dof_upper_limits[self.human_knee_indices] - dof_lower_limits[self.human_knee_indices]) * self.exo_scale_ratio
-        self.exo_action_offset = torch.zeros_like(self.exo_action_scale)
+        self.exo_action_offset = (dof_upper_limits[self.human_knee_indices] + dof_lower_limits[self.human_knee_indices])*0.5
+        print(self.exo_action_scale, self.exo_action_offset)
 
         # load motion
         self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
-
+        
+        # 原始的人体模型顺序（exo）
         self.HUMAN_UPPER_JOINTS = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'neck_x', 'neck_y', 'neck_z', 'right_shoulder_x', 'right_shoulder_y', 'right_shoulder_z', 
-                                'right_elbow', 'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'left_elbow']
-        self.HUMAN_LOWER_JOINTS = ['right_hip_x', 'right_hip_y', 'right_hip_z', 'right_knee', 'right_ankle_x', 'right_ankle_y', 'right_ankle_z',
-                                   'left_hip_x', 'left_hip_y', 'left_hip_z', 'left_knee', 'left_ankle_x', 'left_ankle_y', 'left_ankle_z']
+                                'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'right_elbow', 'left_elbow']
+        self.HUMAN_LOWER_JOINTS = ['right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 
+                                   'right_knee', 'left_knee', 'right_ankle_x', 'right_ankle_y', 'right_ankle_z', 'left_ankle_x', 'left_ankle_y', 'left_ankle_z']
         # DOF and key body indexes
         key_body_names = ["right_hand", "left_hand", "right_foot", "left_foot"]
         self.ref_body_index = self.robot.data.body_names.index(self.cfg.reference_body)

@@ -14,7 +14,7 @@ HUMAN_TORQUE_JOINTS = [
     'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z',
     'right_hip_x', 'right_hip_y', 'right_hip_z',
     'left_hip_x', 'left_hip_y', 'left_hip_z',
-    'right_elbow', 'left_elbow', 'right_knee:1', 'left_knee:1',
+    'right_elbow', 'left_elbow', 'right_knee', 'left_knee',
     'right_ankle_x', 'right_ankle_y', 'right_ankle_z',
     'left_ankle_x', 'left_ankle_y', 'left_ankle_z'
 ]
@@ -22,21 +22,21 @@ HUMAN_TORQUE_JOINTS = [
 # 人体下肢关节（角速度列）
 HUMAN_VEL_PREFIX = "vel_"
 HUMAN_VEL_JOINTS = [
-    'right_hip_x', 'right_hip_y', 'right_hip_z', 'right_knee:1',
+    'right_hip_x', 'right_hip_y', 'right_hip_z', 'right_knee',
     'right_ankle_x', 'right_ankle_y', 'right_ankle_z',
-    'left_hip_x', 'left_hip_y', 'left_hip_z', 'left_knee:1',
+    'left_hip_x', 'left_hip_y', 'left_hip_z', 'left_knee',
     'left_ankle_x', 'left_ankle_y', 'left_ankle_z'
 ]
 HUMAN_VEL_FULL_NAMES = [f"{HUMAN_VEL_PREFIX}{name}" for name in HUMAN_VEL_JOINTS]
 
 # 动作列
 HUMAN_ACTION_JOINTS = [
-    'action_right_hip_x', 'action_right_hip_y', 'action_right_hip_z', 'action_right_knee:1',
+    'action_right_hip_x', 'action_right_hip_y', 'action_right_hip_z', 'action_right_knee',
     'action_right_ankle_x', 'action_right_ankle_y', 'action_right_ankle_z',
-    'action_left_hip_x', 'action_left_hip_y', 'action_left_hip_z', 'action_left_knee:1',
+    'action_left_hip_x', 'action_left_hip_y', 'action_left_hip_z', 'action_left_knee',
     'action_left_ankle_x', 'action_left_ankle_y', 'action_left_ankle_z'
 ]
-EXO_ACTION_JOINTS = ['action_exo_right_knee:1', 'action_exo_left_knee:1']
+EXO_ACTION_JOINTS = ['action_exo_right_knee', 'action_exo_left_knee']
 ACTION_JOINTS = HUMAN_ACTION_JOINTS + EXO_ACTION_JOINTS
 
 # 基础样式（同类型关节统一风格，确保一致性）
@@ -48,10 +48,10 @@ STYLES = {
 
 # 动作关节独立样式（重点关节单独配色，支持统一实线）
 ACTION_STYLES = {
-    'action_exo_right_knee:1': {'color': '#1f77b4', 'linestyle': '-', 'linewidth': 2.0, 'alpha': 0.9, 'label': '外骨骼_右膝'},
-    'action_exo_left_knee:1': {'color': '#2ca02c', 'linestyle': '-', 'linewidth': 2.0, 'alpha': 0.9, 'label': '外骨骼_左膝'},
-    'action_right_knee:1': {'color': '#d62728', 'linestyle': '-', 'linewidth': 2.0, 'alpha': 0.9, 'label': '人体_右膝'},
-    'action_left_knee:1': {'color': '#9467bd', 'linestyle': '-', 'linewidth': 2.0, 'alpha': 0.9, 'label': '人体_左膝'},
+    'action_exo_right_knee': {'color': '#1f77b4', 'linestyle': '-', 'linewidth': 2.0, 'alpha': 0.9, 'label': '外骨骼_右膝'},
+    'action_exo_left_knee': {'color': '#2ca02c', 'linestyle': '-', 'linewidth': 2.0, 'alpha': 0.9, 'label': '外骨骼_左膝'},
+    'action_right_knee': {'color': '#d62728', 'linestyle': '-', 'linewidth': 2.0, 'alpha': 0.9, 'label': '人体_右膝'},
+    'action_left_knee': {'color': '#9467bd', 'linestyle': '-', 'linewidth': 2.0, 'alpha': 0.9, 'label': '人体_左膝'},
     # 可扩展其他动作关节的独立样式
     'action_right_hip_x': {'color': '#ff7f0e', 'linestyle': '-', 'linewidth': 1.8, 'alpha': 0.8, 'label': '人体_右髋X'},
     'action_left_hip_x': {'color': '#17becf', 'linestyle': '-', 'linewidth': 1.8, 'alpha': 0.8, 'label': '人体_左髋X'}

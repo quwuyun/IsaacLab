@@ -26,7 +26,7 @@ class HumanoidAmpEnvCfg(DirectRLEnvCfg):
 
     # env
     episode_length_s = 10.0
-    decimation = 2
+    decimation = 2  # 推理重复仿真步 2
 
     # spaces
     observation_space = 81
@@ -50,7 +50,7 @@ class HumanoidAmpEnvCfg(DirectRLEnvCfg):
 
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1 / 60,
+        dt=1 / 60,  # 仿真60Hz，推理30Hz
         render_interval=decimation,
         physx=PhysxCfg(
             gpu_found_lost_pairs_capacity=2**23,
@@ -74,7 +74,7 @@ class HumanoidAmpEnvCfg(DirectRLEnvCfg):
             ),
         },
     )
-
+    
 
 @configclass
 class HumanoidAmpDanceEnvCfg(HumanoidAmpEnvCfg):
