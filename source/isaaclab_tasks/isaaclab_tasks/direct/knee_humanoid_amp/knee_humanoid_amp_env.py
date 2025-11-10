@@ -83,7 +83,6 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
         self.torque_log_file = None  # 日志文件对象
         self.torque_writer = None
         self.timestep = 0
-
         # 仅在仿真模式（有渲染）时启动日志（不影响训练）
         is_simulation = self.num_envs == 1 or render_mode is not None
         if self.log_torque and is_simulation:
