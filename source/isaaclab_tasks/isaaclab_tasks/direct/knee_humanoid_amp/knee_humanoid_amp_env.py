@@ -79,7 +79,7 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
         # 力矩日志
         # --------------------------------------
         self.log_torque = True  # 控制是否记录力矩（可在配置文件中设置）
-        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_humanoid_amp/torque_logs"
+        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_humanoid_amp/b_torque_logs"
         self.torque_log_file = None  # 日志文件对象
         self.torque_writer = None
         self.timestep = 0
@@ -106,7 +106,7 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
             print("[INFO] 仿真回调绑定成功，将每帧记录力矩数据")
 
         # 添加 TensorBoard writer
-        log_dir = os.path.join("runs/kneehumanamp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        log_dir = os.path.join("runs/b_kneehumanamp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
         self.writer1 = SummaryWriter(log_dir=log_dir)
         self.max_episodes = 800  # horizon_length*max_epochs（总步数）
         self.envs_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境各自的回合
