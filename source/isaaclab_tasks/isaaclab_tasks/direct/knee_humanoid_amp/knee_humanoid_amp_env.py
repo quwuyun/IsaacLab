@@ -184,6 +184,7 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
             joint_vels,
             self.human_upper_dof_indices,
             self.human_lower_dof_indices,
+            self.original_actions[:, self.human_knee_indices]
         )
         return reward
 
@@ -414,6 +415,7 @@ def compute_reward(
     joint_vels: torch.Tensor,
     human_upper_dof_indices: list[int],
     human_lower_dof_indices: list[int],
+    knee_action: torch.Tensor
 ) -> torch.Tensor:
     """
     计算基于关节功率的奖励函数（功率 = 力矩 * 角速度，取绝对值）
@@ -438,4 +440,10 @@ def compute_reward(
     # 缩放功率，避免奖励过小(以力矩为100左右，具体需调整模型力矩限制)
     reward = 1.0 / (total_power / 1000.0 + 1.0)
     
+    # 膝关节action惩罚
+    knee_action_sum = torch.sum(torch.abs(knee_action), dim=1)
+    reward_action = - torch.pow(0.5 * knee_action_sum, exponent=2)
+
+    reward = reward + reward_action
+
     return reward
