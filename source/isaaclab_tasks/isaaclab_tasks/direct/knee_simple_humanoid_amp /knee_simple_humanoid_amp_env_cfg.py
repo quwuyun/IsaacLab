@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 from dataclasses import MISSING
 
-from isaaclab_assets import HUMANOID_28_CFG
+from isaaclab_assets import HUMANOID_14_CFG
 
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
@@ -29,14 +29,14 @@ class KneeSimpleHumanoidAmpEnvCfg(DirectRLEnvCfg):
     decimation = 2
 
     # spaces
-    observation_space = 81-  # 81
-    action_space = 28+2-  # 添加两个膝关节动作
+    observation_space = 47  # 81-22-12
+    action_space = 17+2  # 添加两个膝关节动作
     state_space = 0
     num_amp_observations = 2
-    amp_observation_space = 81
+    amp_observation_space = 47
 
     early_termination = True
-    termination_height = 0.5
+    termination_height = 0.7  # 0.5
 
     motion_file: str = MISSING
     reference_body = "torso"
@@ -62,7 +62,7 @@ class KneeSimpleHumanoidAmpEnvCfg(DirectRLEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=10.0, replicate_physics=True)
 
     # robot
-    robot: ArticulationCfg = HUMANOID_28_CFG.replace(prim_path="/World/envs/env_.*/Robot").replace(
+    robot: ArticulationCfg = HUMANOID_14_CFG.replace(prim_path="/World/envs/env_.*/Robot").replace(
         actuators={
             "body": ImplicitActuatorCfg(
                 joint_names_expr=[".*"],

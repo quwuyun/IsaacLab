@@ -30,8 +30,17 @@ class KneeSimpleHumanoidAmpEnv(DirectRLEnv):
     def __init__(self, cfg: KneeSimpleHumanoidAmpEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
         
-        self.original_actions_dim = 28  # 原始动作维度
+        self.original_actions_dim = 17  # 原始动作维度
         self.exo_actions_dim = 2  # 外骨骼动作维度
+        print("Joint names:", self.robot.data.joint_names)
+        print("Body names:", self.robot.data.body_names)
+        print("Num DOFs:", len(self.robot.data.joint_names))
+        print("Num DOFs:", len(self.robot.data.body_names))
+        self.HUMAN_JOINT = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'neck_x', 'neck_y', 'neck_z', 'right_shoulder_x', 'right_shoulder_y', 'right_shoulder_z', 
+                            'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 
+                            'right_elbow', 'left_elbow', 'right_knee', 'left_knee', 'right_ankle_x', 'right_ankle_y', 'right_ankle_z', 'left_ankle_x', 'left_ankle_y', 'left_ankle_z']
+        self.HUMAN_BODY = ['torso', 'pelvis', 'head', 'right_upper_arm', 'left_upper_arm', 'right_thigh', 'left_thigh', 'right_lower_arm', 'left_lower_arm', 'right_shin', 'left_shin', 
+                           'right_hand', 'left_hand', 'right_foot', 'left_foot']
 
         # action offset and scale
         dof_lower_limits = self.robot.data.soft_joint_pos_limits[0, :, 0]
@@ -45,12 +54,18 @@ class KneeSimpleHumanoidAmpEnv(DirectRLEnv):
         self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
 
         # DOF and key body indexes
-        key_body_names = ["right_hand", "left_hand", "right_foot", "left_foot"]
+        # key_body_names = ["right_hand", "left_hand", "right_foot", "left_foot"]
+        # self.ref_body_index = self.robot.data.body_names.index(self.cfg.reference_body)
+        # self.key_body_indexes = [self.robot.data.body_names.index(name) for name in key_body_names]
+        # self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)
+        # self.motion_ref_body_index = self._motion_loader.get_body_index([self.cfg.reference_body])[0]
+        # self.motion_key_body_indexes = self._motion_loader.get_body_index(key_body_names)
+
         self.ref_body_index = self.robot.data.body_names.index(self.cfg.reference_body)
-        self.key_body_indexes = [self.robot.data.body_names.index(name) for name in key_body_names]
-        self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)
+        self.motion_dof_indexes = self._motion_loader.get_dof_index(self.HUMAN_JOINT)
         self.motion_ref_body_index = self._motion_loader.get_body_index([self.cfg.reference_body])[0]
-        self.motion_key_body_indexes = self._motion_loader.get_body_index(key_body_names)
+        print("在motion中关节索引:", self.motion_dof_indexes)
+        
 
         # reconfigure AMP observation space according to the number of observations and create the buffer
         self.amp_observation_size = self.cfg.num_amp_observations * self.cfg.amp_observation_space
@@ -61,18 +76,10 @@ class KneeSimpleHumanoidAmpEnv(DirectRLEnv):
 
 
         "“”额外关节索引"""
-        print("Joint names:", self.robot.data.joint_names)
-        print("Body names:", self.robot.data.body_names)
-        print("Num DOFs:", len(self.robot.data.joint_names))
-        print("Num DOFs:", len(self.robot.data.body_names))
-        
-        # 原始的人体模型顺序（exo）
-        self.HUMAN_UPPER_JOINTS = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'neck_x', 'neck_y', 'neck_z', 'right_shoulder_x', 'right_shoulder_y', 'right_shoulder_z', 
-                                'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'right_elbow', 'left_elbow']
-        self.HUMAN_LOWER_JOINTS = ['right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 
+        # simple人体模型顺序（exo）
+        self.HUMAN_SIMPLE_JOINTS = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 
                                    'right_knee', 'left_knee', 'right_ankle_x', 'right_ankle_y', 'right_ankle_z', 'left_ankle_x', 'left_ankle_y', 'left_ankle_z']
-        self.human_upper_dof_indices = [self.robot.data.joint_names.index(name) for name in self.HUMAN_UPPER_JOINTS]
-        self.human_lower_dof_indices = [self.robot.data.joint_names.index(name) for name in self.HUMAN_LOWER_JOINTS]
+        self.human_simple_dof_indices = [self.robot.data.joint_names.index(name) for name in self.HUMAN_SIMPLE_JOINTS]
         # 关键关节
         self.human_knee_joint_names = ["right_knee", "left_knee"]
         self.human_hip_joint_names = ["right_hip_y", "left_hip_y"]
@@ -101,8 +108,8 @@ class KneeSimpleHumanoidAmpEnv(DirectRLEnv):
             try:
                 self.torque_log_file = open(self.torque_log_path, "w", newline="", encoding="utf-8")
                 self.torque_writer = csv.writer(self.torque_log_file)
-                headers = ["timestamp", "timestep"] + self.robot.data.joint_names + [f"pos_{name}" for name in self.HUMAN_LOWER_JOINTS] \
-                + [f"vel_{name}" for name in self.HUMAN_LOWER_JOINTS]  + [f"action_{name}" for name in self.HUMAN_LOWER_JOINTS] + [f"action_exo_{name}" for name in self.human_knee_joint_names]
+                headers = ["timestamp", "timestep"] + self.robot.data.joint_names + [f"pos_{name}" for name in self.HUMAN_SIMPLE_JOINTS] \
+                + [f"vel_{name}" for name in self.HUMAN_SIMPLE_JOINTS]  + [f"action_{name}" for name in self.HUMAN_SIMPLE_JOINTS] + [f"action_exo_{name}" for name in self.human_knee_joint_names]
                 self.torque_writer.writerow(headers)
                 print(f"[INFO] 力矩日志启动成功！保存至：{self.torque_log_path}")
             except Exception as e:
@@ -171,7 +178,7 @@ class KneeSimpleHumanoidAmpEnv(DirectRLEnv):
             self.robot.data.body_quat_w[:, self.ref_body_index],
             self.robot.data.body_lin_vel_w[:, self.ref_body_index],
             self.robot.data.body_ang_vel_w[:, self.ref_body_index],
-            self.robot.data.body_pos_w[:, self.key_body_indexes],
+            # self.robot.data.body_pos_w[:, self.key_body_indexes],
         )
 
         # update AMP observation history
@@ -192,8 +199,7 @@ class KneeSimpleHumanoidAmpEnv(DirectRLEnv):
         reward = compute_reward(
             joint_torques,
             joint_vels,
-            self.human_upper_dof_indices,
-            self.human_lower_dof_indices,
+            self.human_simple_dof_indices,
             key_lower_dof_indices,
             self.original_actions[:, self.human_knee_indices]
         )
@@ -295,7 +301,7 @@ class KneeSimpleHumanoidAmpEnv(DirectRLEnv):
             body_rotations[:, self.motion_ref_body_index],
             body_linear_velocities[:, self.motion_ref_body_index],
             body_angular_velocities[:, self.motion_ref_body_index],
-            body_positions[:, self.motion_key_body_indexes],
+            # body_positions[:, self.motion_key_body_indexes],
         )
         return amp_observation.view(-1, self.amp_observation_size)
     
@@ -312,13 +318,13 @@ class KneeSimpleHumanoidAmpEnv(DirectRLEnv):
             # 取第一个环境的力矩数据
             torque_data = self.robot.data.applied_torque[0].cpu().numpy()
             joint_pos = self.robot.data.joint_pos[0].cpu()
-            human_lower_pos = joint_pos[self.human_lower_dof_indices].cpu().numpy()
             joint_vels = self.robot.data.joint_vel[0].cpu()
-            human_lower_vels = joint_vels[self.human_lower_dof_indices].cpu().numpy()
+            human_simple_pos = joint_pos[self.human_simple_dof_indices].cpu().numpy()
+            human_simple_vels = joint_vels[self.human_simple_dof_indices].cpu().numpy()
             timestamp = self.sim.current_time
-            actions_lower = self.actions[0, 14:].cpu().numpy()
+            actions_lower = self.actions[0, :].cpu().numpy()  # 所有关节
 
-            log_row = [timestamp, self.timestep] + torque_data.tolist() + human_lower_pos.tolist() + human_lower_vels.tolist() + actions_lower.tolist()
+            log_row = [timestamp, self.timestep] + torque_data.tolist() + human_simple_pos.tolist() + human_simple_vels.tolist() + actions_lower.tolist()
             self.torque_writer.writerow(log_row)
 
             # 每100帧打印进度
@@ -404,7 +410,7 @@ def compute_obs(
     root_rotations: torch.Tensor,
     root_linear_velocities: torch.Tensor,
     root_angular_velocities: torch.Tensor,
-    key_body_positions: torch.Tensor,
+    # key_body_positions: torch.Tensor,
 ) -> torch.Tensor:
     obs = torch.cat(
         (
@@ -414,7 +420,7 @@ def compute_obs(
             quaternion_to_tangent_and_normal(root_rotations),
             root_linear_velocities,
             root_angular_velocities,
-            (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),
+            # (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),
         ),
         dim=-1,
     )
@@ -424,9 +430,8 @@ def compute_obs(
 def compute_reward(
     joint_torques: torch.Tensor,
     joint_vels: torch.Tensor,
-    human_upper_dof_indices: list[int],
-    human_lower_dof_indices: list[int],
-    key_lower_dof_insics: list[int],
+    human_simple_dof_indices: list[int],
+    key_lower_dof_indices: list[int],
     knee_action: torch.Tensor
 ) -> torch.Tensor:
     """
@@ -439,17 +444,18 @@ def compute_reward(
         human_lower_indices: 人体下肢关节的索引(list[int])
         exo_lower_indices: 外骨骼下肢关节的索引(list[int])
     """
-    torque_upper = joint_torques[:, human_upper_dof_indices]
-    vel_upper = joint_vels[:, human_upper_dof_indices]
-    torque_lower = joint_torques[:, human_lower_dof_indices]
-    vel_lower = joint_vels[:, human_lower_dof_indices]
-    torque_key_lower = joint_torques[:, key_lower_dof_insics]
-    vei_key_lower = joint_vels[:, key_lower_dof_insics]
+    # torque_upper = joint_torques[:, human_upper_dof_indices]
+    # vel_upper = joint_vels[:, human_upper_dof_indices]
+    # torque_lower = joint_torques[:, human_lower_dof_indices]
+    # vel_lower = joint_vels[:, human_lower_dof_indices]
+    # torque_key_lower = joint_torques[:, key_lower_dof_indices]
+    # vei_key_lower = joint_vels[:, key_lower_dof_indices]
 
     # power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)  # (num_envs,)
     # power_lower = torch.sum(torch.abs(torque_lower * vel_lower), dim=1)
     # total_power = 0.3 * power_upper + 0.7 * power_lower
 
+    """b"""
     # power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)
     # power_lower = torch.sum(torch.abs(torque_lower * vel_lower), dim=1)
     # power_key_lower = torch.sum(torch.abs(torque_key_lower * vei_key_lower), dim=1)
@@ -460,15 +466,24 @@ def compute_reward(
     # power_lower = torch.sum(torch.abs(torque_lower * vel_lower), dim=1)
     # power_key_lower = torch.sum(torch.abs(torque_key_lower * vei_key_lower), dim=1)
     # total_power = 0.3 * power_upper + 0.7 * (power_lower + 0.5 * power_key_lower)
+    # knee_action_sum = torch.sum(torch.abs(knee_action), dim=1)
+    # reward_action = - torch.pow(0.5 * knee_action_sum, exponent=2)
 
-    power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)
-    power_dof_upper = torch.abs(torque_upper * vel_upper)
-    power_dof_lower = torch.abs(torque_lower * vel_lower)
-    power_dof_lower_scale = torch.tensor([0.9, 1.2, 0.8, 1.2, 0.9, 1.2, 0.8, 0.9, 1.2, 0.8, 1.2, 0.9, 1.2, 0.8], 
-                                         dtype=power_dof_upper.dtype, device="cuda").reshape(1, 14)
-    power_lower = torch.sum(power_dof_lower_scale * power_dof_lower, dim=1)
-    total_power = 0.3 * power_upper + 0.7 * power_lower
-    
+    """c"""
+    # power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)
+    # power_dof_upper = torch.abs(torque_upper * vel_upper)
+    # power_dof_lower = torch.abs(torque_lower * vel_lower)
+    # power_dof_lower_scale = torch.tensor([0.9, 1.2, 0.8, 0.9, 1.2, 0.8, 1.2, 1.2, 0.9, 1.2, 0.8, 0.9, 1.2, 0.8], 
+    #                                      dtype=power_dof_upper.dtype, device="cuda").reshape(1, 14)
+    # power_lower = torch.sum(power_dof_lower_scale * power_dof_lower, dim=1)
+    # total_power = 0.3 * power_upper + 0.7 * power_lower
+    # knee_action_sum = torch.sum(torch.abs(knee_action), dim=1)
+    # reward_action = - torch.pow(0.5 * knee_action_sum, exponent=2)
+
+    """d"""
+    torque_upper = joint_torques[:, human_simple_dof_indices]
+    vel_upper = joint_vels[:, human_simple_dof_indices]
+    total_power = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)
     # 缩放功率，避免奖励过小(以力矩为100左右，具体需调整模型力矩限制)
     reward_power = 1.0 / (total_power / 1000.0 + 1.0)
     

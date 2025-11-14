@@ -61,6 +61,10 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
 
 
         "“”额外关节索引"""
+        print("Joint names:", self.robot.data.joint_names)
+        print("Body names:", self.robot.data.body_names)
+        print("Num DOFs:", len(self.robot.data.joint_names))
+        print("Num DOFs:", len(self.robot.data.body_names))
         # 原始的人体模型顺序（exo）
         self.HUMAN_UPPER_JOINTS = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'neck_x', 'neck_y', 'neck_z', 'right_shoulder_x', 'right_shoulder_y', 'right_shoulder_z', 
                                 'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'right_elbow', 'left_elbow']
