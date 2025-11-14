@@ -91,8 +91,8 @@ agent:
   value_loss_scale: 2.5
   discriminator_loss_scale: 5.0
   amp_batch_size: 512
-  task_reward_weight: 0.5  # 任务奖励权重
-  style_reward_weight: 0.5  # 风格奖励权重
+  task_reward_weight: 0.0
+  style_reward_weight: 1.0
   discriminator_batch_size: 4096
   discriminator_reward_scale: 2.0
   discriminator_logit_regularization_scale: 0.05
@@ -102,7 +102,7 @@ agent:
   time_limit_bootstrap: False
   # logging and checkpoint
   experiment:
-    directory: "exo_humanoid_amp_walk"
+    directory: "humanoid_amp_dance"
     experiment_name: ""
     write_interval: auto
     checkpoint_interval: auto
@@ -112,5 +112,5 @@ agent:
 # https://skrl.readthedocs.io/en/latest/api/trainers/sequential.html
 trainer:
   class: SequentialTrainer
-  timesteps: 200000
+  timesteps: 80000
   environment_info: log

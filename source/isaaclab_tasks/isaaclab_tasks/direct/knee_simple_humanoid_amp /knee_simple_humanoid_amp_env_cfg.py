@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 from dataclasses import MISSING
 
-from isaaclab_assets import HUMANOID_28_EXO_CFG
+from isaaclab_assets import HUMANOID_28_CFG
 
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
@@ -20,17 +20,17 @@ from isaaclab.utils import configclass
 MOTIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "motions")
 
 
-@configclass  # 装饰器
-class ExoHumanoidAmpEnvCfg(DirectRLEnvCfg):
-    """Exo Humanoid AMP environment config (base class)."""
+@configclass
+class KneeSimpleHumanoidAmpEnvCfg(DirectRLEnvCfg):
+    """Knee Lower Humanoid AMP environment config (base class)."""
 
     # env
     episode_length_s = 10.0
     decimation = 2
 
     # spaces
-    observation_space = 81+22  # num_exo_dof_obs=22 (11*2)
-    action_space = 28+11  # 添加num_exo_dof=11 (3+(3+1)*2)
+    observation_space = 81-  # 81
+    action_space = 28+2-  # 添加两个膝关节动作
     state_space = 0
     num_amp_observations = 2
     amp_observation_space = 81
@@ -40,7 +40,7 @@ class ExoHumanoidAmpEnvCfg(DirectRLEnvCfg):
 
     motion_file: str = MISSING
     reference_body = "torso"
-    reset_strategy = "random"  # 重置模式 default, random, random-start
+    reset_strategy = "random"  # default, random, random-start
     """Strategy to be followed when resetting each environment (humanoid's pose and joint states).
 
     * default: pose and joint states are set to the initial state of the asset.
@@ -50,11 +50,11 @@ class ExoHumanoidAmpEnvCfg(DirectRLEnvCfg):
 
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1 / 60,  # 1 / 60
+        dt=1 / 60,  # 60
         render_interval=decimation,
         physx=PhysxCfg(
-            gpu_found_lost_pairs_capacity=2**23,  # 2**23
-            gpu_total_aggregate_pairs_capacity=2**23,  # 2**23
+            gpu_found_lost_pairs_capacity=2**23,
+            gpu_total_aggregate_pairs_capacity=2**23,
         ),
     )
 
@@ -62,8 +62,7 @@ class ExoHumanoidAmpEnvCfg(DirectRLEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=10.0, replicate_physics=True)
 
     # robot
-    # 设置USD导入路径***
-    robot: ArticulationCfg = HUMANOID_28_EXO_CFG.replace(prim_path="/World/envs/env_.*/Robot").replace(
+    robot: ArticulationCfg = HUMANOID_28_CFG.replace(prim_path="/World/envs/env_.*/Robot").replace(
         actuators={
             "body": ImplicitActuatorCfg(
                 joint_names_expr=[".*"],
@@ -78,15 +77,15 @@ class ExoHumanoidAmpEnvCfg(DirectRLEnvCfg):
 
 
 @configclass
-class ExoHumanoidAmpDanceEnvCfg(ExoHumanoidAmpEnvCfg):
+class KneeSimpleHumanoidAmpDanceEnvCfg(KneeSimpleHumanoidAmpEnvCfg):
     motion_file = os.path.join(MOTIONS_DIR, "humanoid_dance.npz")
 
 
 @configclass
-class ExoHumanoidAmpRunEnvCfg(ExoHumanoidAmpEnvCfg):
+class KneeSimpleHumanoidAmpRunEnvCfg(KneeSimpleHumanoidAmpEnvCfg):
     motion_file = os.path.join(MOTIONS_DIR, "humanoid_run.npz")
 
 
 @configclass
-class ExoHumanoidAmpWalkEnvCfg(ExoHumanoidAmpEnvCfg):
+class KneeSimpleHumanoidAmpWalkEnvCfg(KneeSimpleHumanoidAmpEnvCfg):
     motion_file = os.path.join(MOTIONS_DIR, "humanoid_walk.npz")
