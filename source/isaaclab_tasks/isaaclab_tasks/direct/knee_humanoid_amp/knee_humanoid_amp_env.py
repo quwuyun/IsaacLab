@@ -459,7 +459,7 @@ def compute_reward(
     power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)
     power_dof_upper = torch.abs(torque_upper * vel_upper)
     power_dof_lower = torch.abs(torque_lower * vel_lower)
-    power_dof_lower_scale = torch.tensor([0.9, 1.2, 0.8, 1.2, 0.9, 1.2, 0.8, 0.9, 1.2, 0.8, 1.2, 0.9, 1.2, 0.8], 
+    power_dof_lower_scale = torch.tensor([0.9, 1.2, 0.8, 0.9, 1.2, 0.8, 1.2, 1.2, 0.9, 1.2, 0.8, 0.9, 1.2, 0.8], 
                                          dtype=power_dof_upper.dtype, device="cuda").reshape(1, 14)
     power_lower = torch.sum(power_dof_lower_scale * power_dof_lower, dim=1)
     total_power = 0.3 * power_upper + 0.7 * power_lower
