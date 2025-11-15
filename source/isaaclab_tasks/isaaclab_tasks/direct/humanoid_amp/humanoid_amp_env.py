@@ -75,6 +75,7 @@ class HumanoidAmpEnv(DirectRLEnv):
         self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)
         self.motion_ref_body_index = self._motion_loader.get_body_index([self.cfg.reference_body])[0]
         self.motion_key_body_indexes = self._motion_loader.get_body_index(key_body_names)
+        print("在motion中关节索引:", self.motion_dof_indexes)
 
         # reconfigure AMP observation space according to the number of observations and create the buffer
         self.amp_observation_size = self.cfg.num_amp_observations * self.cfg.amp_observation_space
@@ -113,7 +114,7 @@ class HumanoidAmpEnv(DirectRLEnv):
             print("[INFO] 仿真回调绑定成功，将每帧记录力矩数据")
 
         # 添加 TensorBoard writer
-        log_dir = os.path.join("runs/humanamp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        log_dir = os.path.join("runs/human_amp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
         self.writer1 = SummaryWriter(log_dir=log_dir)
         self.max_episodes = 800  # horizon_length*max_epochs（总步数）
         self.envs_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境各自的回合
