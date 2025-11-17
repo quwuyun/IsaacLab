@@ -15,32 +15,14 @@ from . import agents
 # Register Gym environments.
 ##
 
-gym.register(
-    id="Isaac-Knee-Simple-Humanoid-AMP-Dance-Direct-v0",
-    entry_point=f"{__name__}.knee_simple_humanoid_amp_env:KneeSimpleHumanoidAmpEnv",
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.knee_simple_humanoid_amp_env_cfg:KneeSimpleHumanoidAmpDanceEnvCfg",
-        "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_dance_amp_cfg.yaml",
-    },
-)
 
 gym.register(
-    id="Isaac-Knee-Simple-Humanoid-AMP-Run-Direct-v0",
-    entry_point=f"{__name__}.knee_simple_humanoid_amp_env:KneeSimpleHumanoidAmpEnv",
+    id="Isaac-Knee-Simple-Humanoid-Distillation-Walk-Direct-v0",
+    entry_point=f"{__name__}.knee_simple_humanoid_distillation_env:KneeSimpleHumanoidDistillationEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{__name__}.knee_simple_humanoid_amp_env_cfg:KneeSimpleHumanoidAmpRunEnvCfg",
-        "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_run_amp_cfg.yaml",
-    },
-)
-
-gym.register(
-    id="Isaac-Knee-Simple-Humanoid-AMP-Walk-Direct-v0",
-    entry_point=f"{__name__}.knee_simple_humanoid_amp_env:KneeSimpleHumanoidAmpEnv",
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.knee_simple_humanoid_amp_env_cfg:KneeSimpleHumanoidAmpWalkEnvCfg",
-        "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_walk_amp_cfg.yaml",
+        "env_cfg_entry_point": f"{__name__}.knee_simple_humanoid_amp_env_cfg:KneeSimpleHumanoidDistillationWalkEnvCfg",
+        # "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_walk_amp_cfg.yaml",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:KneeSimpleHumanoidPPORunnerCfg",
     },
 )
