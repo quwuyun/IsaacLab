@@ -52,7 +52,7 @@ class KneeEffortHumanoidAmpEnv(DirectRLEnv):
         print(f"初始kp:{initial_kp[0]}")
         print(f"初始kd:{initial_kd[0]}")
         kp_scale = 0.05
-        kd_scale = 0.05   # 0.05
+        kd_scale = 0.04   # 0.05
         new_stiffness = initial_kp * kp_scale
         new_damping = initial_kd * kd_scale
         actuator.stiffness[:] = new_stiffness
@@ -381,6 +381,9 @@ class KneeEffortHumanoidAmpEnv(DirectRLEnv):
         mean_cumulative_reward = self.episode_rewards.mean()  # 所有环境当前帧平均回合奖励
         self.writer1.add_scalar("reward/frame", mean_cumulative_reward, self.global_frame)
         self.global_frame += 1
+
+        mean_step_reward = np.mean(rewards_np)
+        self.writer1.add_scalar(f"reward/step", mean_step_reward, self.global_frame)
 
         for env_id in done_env_ids:
             ep_reward = self.episode_rewards[env_id]  # 完成回合的环境当前回合总奖励
