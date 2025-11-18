@@ -21,7 +21,7 @@ MOTIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "motions"
 
 
 @configclass
-class KneeHumanoidAmpEnvCfg(DirectRLEnvCfg):
+class KneeEffortHumanoidAmpEnvCfg(DirectRLEnvCfg):
     """Knee Humanoid AMP environment config (base class)."""
 
     # env
@@ -30,7 +30,7 @@ class KneeHumanoidAmpEnvCfg(DirectRLEnvCfg):
 
     # spaces
     observation_space = 81
-    action_space = 28+2  # 添加两个膝关节动作
+    action_space = 28+2  # 添加两个膝关节动作，前馈力矩
     state_space = 0
     num_amp_observations = 2
     amp_observation_space = 81
@@ -77,15 +77,15 @@ class KneeHumanoidAmpEnvCfg(DirectRLEnvCfg):
 
 
 @configclass
-class KneeHumanoidAmpDanceEnvCfg(KneeHumanoidAmpEnvCfg):
+class KneeEffortHumanoidAmpDanceEnvCfg(KneeEffortHumanoidAmpEnvCfg):
     motion_file = os.path.join(MOTIONS_DIR, "humanoid_dance.npz")
 
 
 @configclass
-class KneeHumanoidAmpRunEnvCfg(KneeHumanoidAmpEnvCfg):
+class KneeEffortHumanoidAmpRunEnvCfg(KneeEffortHumanoidAmpEnvCfg):
     motion_file = os.path.join(MOTIONS_DIR, "humanoid_run.npz")
 
 
 @configclass
-class KneeHumanoidAmpWalkEnvCfg(KneeHumanoidAmpEnvCfg):
+class KneeEffortHumanoidAmpWalkEnvCfg(KneeEffortHumanoidAmpEnvCfg):
     motion_file = os.path.join(MOTIONS_DIR, "humanoid_walk.npz")

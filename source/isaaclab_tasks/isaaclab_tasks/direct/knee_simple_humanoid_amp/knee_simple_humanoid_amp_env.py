@@ -132,7 +132,7 @@ class KneeSimpleHumanoidAmpEnv(DirectRLEnv):
 
 
         """添加 TensorBoard writer"""
-        log_dir = os.path.join("runs/d_kneesimplehumanamp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        log_dir = os.path.join("runs/knee_human_amp_walk/d_kneesimplehumanamp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
         self.writer1 = SummaryWriter(log_dir=log_dir)
         self.max_episodes = 8000  # horizon_length*max_epochs（总步数）
         self.envs_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境各自的回合

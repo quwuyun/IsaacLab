@@ -15,7 +15,7 @@ from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import quat_apply
 
-from .knee_humanoid_amp_env_cfg import KneeHumanoidAmpEnvCfg
+from .knee_effort_humanoid_amp_env_cfg import KneeEffortHumanoidAmpEnvCfg
 from .motions import MotionLoader
 
 import time
@@ -24,14 +24,41 @@ import csv
 from torch.utils.tensorboard import SummaryWriter
 import datetime
 
-class KneeHumanoidAmpEnv(DirectRLEnv):
-    cfg: KneeHumanoidAmpEnvCfg
+class KneeEffortHumanoidAmpEnv(DirectRLEnv):
+    cfg: KneeEffortHumanoidAmpEnvCfg
 
-    def __init__(self, cfg: KneeHumanoidAmpEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: KneeEffortHumanoidAmpEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
         
-        self.original_actions_dim = 28  # 原始动作维度
-        self.exo_actions_dim = 2  # 外骨骼动作维度
+        self.original_actions_dim = 28  # 原始动作维度（角度）
+        self.exo_actions_dim = 2  # 外骨骼动作维度（力矩）
+
+        current_stiffness = self.robot.data.joint_stiffness.clone()  # (num_envs, num_joints)
+        current_damping = self.robot.data.joint_damping.clone()
+        print(f"初始刚度: {current_stiffness[0]}")
+        print(f"初始阻尼: {current_damping[0]}")
+        stiffness_scale = 0.5
+        damping_scale = 0.5
+        new_stiffness = current_stiffness * stiffness_scale
+        new_damping = current_damping * damping_scale
+        self.robot.write_joint_stiffness_to_sim(new_stiffness)
+        self.robot.write_joint_damping_to_sim(new_damping)
+        print(f"最终刚度: {self.robot.data.joint_stiffness[0]}")
+        print(f"最终阻尼: {self.robot.data.joint_damping[0]}")
+
+        actuator = self.robot.actuators["body"]
+        initial_kp = actuator.stiffness.clone()
+        initial_kd = actuator.damping.clone()
+        print(f"初始kp:{initial_kp[0]}")
+        print(f"初始kd:{initial_kd[0]}")
+        kp_scale = 0.05
+        kd_scale = 0.05   # 0.05
+        new_stiffness = initial_kp * kp_scale
+        new_damping = initial_kd * kd_scale
+        actuator.stiffness[:] = new_stiffness
+        actuator.damping[:] = new_damping
+        print(f"最终kp:{actuator.stiffness[0]}")
+        print(f"最终kd:{actuator.damping[0]}")
 
         # action offset and scale
         dof_lower_limits = self.robot.data.soft_joint_pos_limits[0, :, 0]
@@ -79,15 +106,14 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
         self.human_hip_indices = [self.robot.data.joint_names.index(name) for name in self.human_hip_joint_names]
 
         # 外骨骼offset and scale
-        self.exo_scale_ratio = 1.0  # 外骨骼动作缩放比例
-        self.exo_action_scale = (dof_upper_limits[self.human_knee_indices] - dof_lower_limits[self.human_knee_indices]) * self.exo_scale_ratio
-        self.exo_action_offset = (dof_upper_limits[self.human_knee_indices] + dof_lower_limits[self.human_knee_indices])*0.5
-        print(self.exo_action_scale, self.exo_action_offset)
+        # self.exo_effort_scale = 5
+        self.exo_effort_scale = 100
+        self.exo_effort_offset = 0
 
 
         """力矩日志"""
         self.log_torque = True  # 控制是否记录力矩（可在配置文件中设置）
-        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_humanoid_amp/c_torque_logs"
+        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_amp/torque-effort_logs"
         self.torque_log_file = None  # 日志文件对象
         self.torque_writer = None
         self.timestep = 0
@@ -96,7 +122,7 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
         if self.log_torque and is_simulation:
             os.makedirs(self.torque_log_dir, exist_ok=True)
             timestamp = time.strftime("%Y%m%d_%H%M%S")
-            self.torque_log_path = f"{self.torque_log_dir}/energe_torque_{timestamp}.csv"
+            self.torque_log_path = f"{self.torque_log_dir}/torque-effort_{timestamp}.csv"
             try:
                 self.torque_log_file = open(self.torque_log_path, "w", newline="", encoding="utf-8")
                 self.torque_writer = csv.writer(self.torque_log_file)
@@ -114,7 +140,7 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
 
 
         """添加 TensorBoard writer"""
-        log_dir = os.path.join("runs/c_kneehumanamp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        log_dir = os.path.join("runs/knee_effort_human_amp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
         self.writer1 = SummaryWriter(log_dir=log_dir)
         self.max_episodes = 800  # horizon_length*max_epochs（总步数）
         self.envs_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境各自的回合
@@ -155,11 +181,12 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
         self.actions = actions.clone()
 
     def _apply_action(self):
-        target = self.action_offset + self.action_scale * self.original_actions
-        exo_pos_offset = self.exo_action_offset + self.exo_action_scale * self.exo_action
-        target[:, self.human_knee_indices] += exo_pos_offset
+        human_target = self.action_offset + self.action_scale * self.original_actions
+        exo_effort_target = self.exo_effort_offset + self.exo_effort_scale * self.exo_action
+        # print(f"目标值类型", human_target.shape, exo_effort_target.shape)
 
-        self.robot.set_joint_position_target(target)
+        self.robot.set_joint_position_target(human_target)
+        self.robot.set_joint_effort_target(exo_effort_target, joint_ids=self.human_knee_indices)  # 前馈力给到膝关节
 
     def _get_observations(self) -> dict:
         # build task observation
@@ -186,15 +213,16 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
         # return torch.ones((self.num_envs,), dtype=torch.float32, device=self.sim.device)
         joint_torques = self.robot.data.applied_torque  # (num_envs, num_dofs)
         joint_vels = self.robot.data.joint_vel          # (num_envs, num_dofs)
-        key_lower_dof_indices = self.human_hip_indices + self.human_knee_indices
+        key_lower_dof_indices = self.human_knee_indices
+        exo_knee_torque = self.exo_effort_offset + self.exo_effort_scale * self.exo_action
 
         reward = compute_reward(
             joint_torques,
             joint_vels,
+            exo_knee_torque,
             self.human_upper_dof_indices,
             self.human_lower_dof_indices,
             key_lower_dof_indices,
-            self.original_actions[:, self.human_knee_indices]
         )
         return reward
 
@@ -298,6 +326,7 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
         )
         return amp_observation.view(-1, self.amp_observation_size)
     
+
     def _record_data(self, dt: float):
         """由仿真回调调用，每帧记录力矩数据"""
         if not self.log_torque or self.torque_writer is None:
@@ -309,15 +338,16 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
                 self.timestep += 1
                 return
             # 取第一个环境的力矩数据
+            timestamp = self.sim.current_time
             torque_data = self.robot.data.applied_torque[0].cpu().numpy()
             joint_pos = self.robot.data.joint_pos[0].cpu()
             human_lower_pos = joint_pos[self.human_lower_dof_indices].cpu().numpy()
             joint_vels = self.robot.data.joint_vel[0].cpu()
             human_lower_vels = joint_vels[self.human_lower_dof_indices].cpu().numpy()
-            timestamp = self.sim.current_time
-            actions_lower = self.actions[0, 14:].cpu().numpy()
+            human_lower_actions = self.actions[0, self.human_lower_dof_indices].cpu().numpy()
+            exo_efforts = self.actions[0, -2:].cpu().numpy()
 
-            log_row = [timestamp, self.timestep] + torque_data.tolist() + human_lower_pos.tolist() + human_lower_vels.tolist() + actions_lower.tolist()
+            log_row = [timestamp, self.timestep] + torque_data.tolist() + human_lower_pos.tolist() + human_lower_vels.tolist() + human_lower_actions.tolist() + exo_efforts.tolist()
             self.torque_writer.writerow(log_row)
 
             # 每100帧打印进度
@@ -333,7 +363,7 @@ class KneeHumanoidAmpEnv(DirectRLEnv):
         rew_buf = rewards.detach().cpu().numpy() if rewards.requires_grad else rewards.cpu().numpy()
 
         reset_buf = terminated | truncated
-        done_env_ids = reset_buf.nonzero(as_tuple=False).flatten()   # <-- 完全等价于你原来的 self.reset_buf
+        done_env_ids = reset_buf.nonzero(as_tuple=False).flatten()
 
         self.tensorboard_rew(rew_buf, done_env_ids)
 
@@ -423,10 +453,10 @@ def compute_obs(
 def compute_reward(
     joint_torques: torch.Tensor,
     joint_vels: torch.Tensor,
+    exo_knee_torque: torch.Tensor,
     human_upper_dof_indices: list[int],
     human_lower_dof_indices: list[int],
-    key_lower_dof_insics: list[int],
-    knee_action: torch.Tensor
+    key_lower_dof_insices: list[int],
 ) -> torch.Tensor:
     """
     计算基于关节功率的奖励函数（功率 = 力矩 * 角速度，取绝对值）
@@ -438,32 +468,18 @@ def compute_reward(
         human_lower_indices: 人体下肢关节的索引(list[int])
         exo_lower_indices: 外骨骼下肢关节的索引(list[int])
     """
+    joint_torques[:, key_lower_dof_insices] -= exo_knee_torque
     torque_upper = joint_torques[:, human_upper_dof_indices]
     vel_upper = joint_vels[:, human_upper_dof_indices]
     torque_lower = joint_torques[:, human_lower_dof_indices]
     vel_lower = joint_vels[:, human_lower_dof_indices]
-    torque_key_lower = joint_torques[:, key_lower_dof_insics]
-    vei_key_lower = joint_vels[:, key_lower_dof_insics]
-
-    # power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)  # (num_envs,)
-    # power_lower = torch.sum(torch.abs(torque_lower * vel_lower), dim=1)
-    # total_power = 0.3 * power_upper + 0.7 * power_lower
-
-    # power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)
-    # power_lower = torch.sum(torch.abs(torque_lower * vel_lower), dim=1)
-    # power_key_lower = torch.sum(torch.abs(torque_key_lower * vei_key_lower), dim=1)
-    # power_nokey_lower = power_lower - power_key_lower
-    # total_power = 0.2 * power_upper + 0.3 * power_nokey_lower + 0.5 * power_key_lower
-    
-    # power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)
-    # power_lower = torch.sum(torch.abs(torque_lower * vel_lower), dim=1)
-    # power_key_lower = torch.sum(torch.abs(torque_key_lower * vei_key_lower), dim=1)
-    # total_power = 0.3 * power_upper + 0.7 * (power_lower + 0.5 * power_key_lower)
+    # print("膝关节力矩：", torque_lower[key_lower_dof_insices])
+    # print("外骨骼力矩：", exo_knee_torque)
 
     power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)
     power_dof_upper = torch.abs(torque_upper * vel_upper)
     power_dof_lower = torch.abs(torque_lower * vel_lower)
-    power_dof_lower_scale = torch.tensor([0.9, 1.2, 0.8, 1.2, 0.9, 1.2, 0.8, 0.9, 1.2, 0.8, 1.2, 0.9, 1.2, 0.8], 
+    power_dof_lower_scale = torch.tensor([0.9, 1.2, 0.8, 0.9, 1.2, 0.8, 1.2, 1.2, 0.9, 1.2, 0.8, 0.9, 1.2, 0.8], 
                                          dtype=power_dof_upper.dtype, device="cuda").reshape(1, 14)
     power_lower = torch.sum(power_dof_lower_scale * power_dof_lower, dim=1)
     total_power = 0.3 * power_upper + 0.7 * power_lower
@@ -471,10 +487,7 @@ def compute_reward(
     # 缩放功率，避免奖励过小(以力矩为100左右，具体需调整模型力矩限制)
     reward_power = 1.0 / (total_power / 1000.0 + 1.0)
     
-    # 膝关节action惩罚
-    knee_action_sum = torch.sum(torch.abs(knee_action), dim=1)
-    reward_action = - torch.pow(0.5 * knee_action_sum, exponent=2)
 
-    reward = reward_power + reward_action
+    reward = reward_power
 
     return reward
