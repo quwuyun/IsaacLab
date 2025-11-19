@@ -36,14 +36,28 @@ class HumanoidAmpEnv(DirectRLEnv):
         current_damping = self.robot.data.joint_damping.clone()
         print(f"初始刚度: {current_stiffness[0]}")
         print(f"初始阻尼: {current_damping[0]}")
-        stiffness_scale = 1
-        damping_scale = 1
+        stiffness_scale = 0.5
+        damping_scale = 0.5
         new_stiffness = current_stiffness * stiffness_scale
         new_damping = current_damping * damping_scale
         self.robot.write_joint_stiffness_to_sim(new_stiffness)
         self.robot.write_joint_damping_to_sim(new_damping)
         print(f"最终刚度: {self.robot.data.joint_stiffness[0]}")
         print(f"最终阻尼: {self.robot.data.joint_damping[0]}")
+
+        actuator = self.robot.actuators["body"]
+        initial_kp = actuator.stiffness.clone()
+        initial_kd = actuator.damping.clone()
+        print(f"初始kp:{initial_kp[0]}")
+        print(f"初始kd:{initial_kd[0]}")
+        kp_scale = 0.05
+        kd_scale = 0.04   # 0.05
+        new_stiffness = initial_kp * kp_scale
+        new_damping = initial_kd * kd_scale
+        actuator.stiffness[:] = new_stiffness
+        actuator.damping[:] = new_damping
+        print(f"最终kp:{actuator.stiffness[0]}")
+        print(f"最终kd:{actuator.damping[0]}")
 
         print("Joint names:", self.robot.data.joint_names)
         print("Body names:", self.robot.data.body_names)
@@ -88,7 +102,7 @@ class HumanoidAmpEnv(DirectRLEnv):
         # 力矩日志
         # --------------------------------------
         self.log_torque = True  # 控制是否记录力矩（可在配置文件中设置）
-        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/humanoid_amp/torque_logs"
+        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/humanoid_amp/torque_logs_pd-effort"
         self.torque_log_file = None  # 日志文件对象
         self.torque_writer = None
         self.timestep = 0
@@ -346,6 +360,9 @@ class HumanoidAmpEnv(DirectRLEnv):
         self.writer1.add_scalar("reward/frame", mean_cumulative_reward, self.global_frame)
         self.global_frame += 1
 
+        mean_step_reward = np.mean(rewards_np)
+        self.writer1.add_scalar(f"reward/step", mean_step_reward, self.global_frame)
+
         for env_id in done_env_ids:
             ep_reward = self.episode_rewards[env_id]  # 完成回合的环境当前回合总奖励
             self.envs_episode_rewards[env_id, self.envs_episode_count[env_id]] = ep_reward
@@ -432,13 +449,17 @@ def compute_reward(
     """
     torque_upper = joint_torques[:, human_upper_dof_indices]
     vel_upper = joint_vels[:, human_upper_dof_indices]
-    torque_human_lower = joint_torques[:, human_lower_dof_indices]
-    vel_human_lower = joint_vels[:, human_lower_dof_indices]
+    torque_lower = joint_torques[:, human_lower_dof_indices]
+    vel_lower = joint_vels[:, human_lower_dof_indices]
 
-    power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)  # (num_envs,)
-    power_lower = torch.sum(torch.abs(torque_human_lower * vel_human_lower), dim=1)
-
+    power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)
+    power_dof_upper = torch.abs(torque_upper * vel_upper)
+    power_dof_lower = torch.abs(torque_lower * vel_lower)
+    power_dof_lower_scale = torch.tensor([0.9, 1.2, 0.8, 0.9, 1.2, 0.8, 1.2, 1.2, 0.9, 1.2, 0.8, 0.9, 1.2, 0.8], 
+                                         dtype=power_dof_upper.dtype, device="cuda").reshape(1, 14)
+    power_lower = torch.sum(power_dof_lower_scale * power_dof_lower, dim=1)
     total_power = 0.3 * power_upper + 0.7 * power_lower
+
     
     # 缩放功率，避免奖励过小(以力矩为100左右，具体需调整模型力矩限制)
     reward = 1.0 / (total_power / 1000.0 + 1.0)
