@@ -15,7 +15,7 @@ from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import quat_apply
 
-from .knee_simple_humanoid_distillation_env_cfg import KneeSimpleHumanoidDistillationEnvCfg
+from .knee_effort_simple_humanoid_amp_env_cfg import KneeEffortSimpleHumanoidAmpEnvCfg
 from .motions import MotionLoader
 
 import time
@@ -24,49 +24,41 @@ import csv
 from torch.utils.tensorboard import SummaryWriter
 import datetime
 
+class KneeEffortSimpleHumanoidAmpEnv(DirectRLEnv):
+    cfg: KneeEffortSimpleHumanoidAmpEnvCfg
 
-class SimpleMLP(torch.nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, hidden_dims: list[int], activation: str = "relu"):
-        super().__init__()
-        # 构建网络层
-        layers = []
-        prev_dim = input_dim
-        for dim in hidden_dims:
-            layers.append(torch.nn.Linear(prev_dim, dim))
-            if activation == "relu":
-                layers.append(torch.nn.ReLU())
-            prev_dim = dim
-        # 输出层（无激活函数，与SKRL的高斯策略输出一致）
-        layers.append(torch.nn.Linear(prev_dim, output_dim))
-        self.layers = torch.nn.Sequential(*layers)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.layers(x)
-    
-
-class KneeSimpleHumanoidDistillationEnv(DirectRLEnv):
-    cfg: KneeSimpleHumanoidDistillationEnvCfg
-
-    def __init__(self, cfg: KneeSimpleHumanoidDistillationEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: KneeEffortSimpleHumanoidAmpEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
         
-        self.original_actions_dim = 28  # 原始动作维度
-        self.exo_actions_dim = 2  # 外骨骼动作维度
-        print("Joint names:", self.robot.data.joint_names)
-        print("Body names:", self.robot.data.body_names)
-        print("Num DOFs:", len(self.robot.data.joint_names))
-        print("Num DOFs:", len(self.robot.data.body_names))
-        self.HUMAN_JOINT = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'neck_x', 'neck_y', 'neck_z', 'right_shoulder_x', 'right_shoulder_y', 'right_shoulder_z', 
-                            'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 
-                            'right_elbow', 'left_elbow', 'right_knee', 'left_knee', 'right_ankle_x', 'right_ankle_y', 'right_ankle_z', 'left_ankle_x', 'left_ankle_y', 'left_ankle_z']
-        self.HUMAN_BODY = ['torso', 'pelvis', 'head', 'right_upper_arm', 'left_upper_arm', 'right_thigh', 'left_thigh', 'right_lower_arm', 'left_lower_arm', 'right_shin', 'left_shin', 
-                           'right_hand', 'left_hand', 'right_foot', 'left_foot']
-        self.HUMAN_MOTION_JOINT = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'neck_x', 'neck_y', 'neck_z', 'right_shoulder_x', 'right_shoulder_y', 'right_shoulder_z', 'right_elbow',  
-                            'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'left_elbow', 'right_hip_x', 'right_hip_y', 'right_hip_z', 'right_knee', 'right_ankle_x', 'right_ankle_y', 'right_ankle_z', 
-                            'left_hip_x', 'left_hip_y', 'left_hip_z', 'left_knee', 'left_ankle_x', 'left_ankle_y', 'left_ankle_z']
-        # simple人体模型顺序（exo）
-        self.HUMAN_SIMPLE_JOINTS = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 
-                                   'right_knee', 'left_knee', 'right_ankle_x', 'right_ankle_y', 'right_ankle_z', 'left_ankle_x', 'left_ankle_y', 'left_ankle_z']
+        self.original_actions_dim = 28  # 原始动作维度（角度）
+        self.exo_actions_dim = 2  # 外骨骼动作维度（力矩）
+
+        current_stiffness = self.robot.data.joint_stiffness.clone()  # (num_envs, num_joints)
+        current_damping = self.robot.data.joint_damping.clone()
+        print(f"初始刚度: {current_stiffness[0]}")
+        print(f"初始阻尼: {current_damping[0]}")
+        stiffness_scale = 0.5
+        damping_scale = 0.5
+        new_stiffness = current_stiffness * stiffness_scale
+        new_damping = current_damping * damping_scale
+        self.robot.write_joint_stiffness_to_sim(new_stiffness)
+        self.robot.write_joint_damping_to_sim(new_damping)
+        print(f"最终刚度: {self.robot.data.joint_stiffness[0]}")
+        print(f"最终阻尼: {self.robot.data.joint_damping[0]}")
+
+        actuator = self.robot.actuators["body"]
+        initial_kp = actuator.stiffness.clone()
+        initial_kd = actuator.damping.clone()
+        print(f"初始kp:{initial_kp[0]}")
+        print(f"初始kd:{initial_kd[0]}")
+        kp_scale = 0.05
+        kd_scale = 0.04
+        new_stiffness = initial_kp * kp_scale
+        new_damping = initial_kd * kd_scale
+        actuator.stiffness[:] = new_stiffness
+        actuator.damping[:] = new_damping
+        print(f"最终kp:{actuator.stiffness[0]}")
+        print(f"最终kd:{actuator.damping[0]}")
 
         # action offset and scale
         dof_lower_limits = self.robot.data.soft_joint_pos_limits[0, :, 0]
@@ -77,39 +69,36 @@ class KneeSimpleHumanoidDistillationEnv(DirectRLEnv):
         print(f"动作上限: {dof_upper_limits}")
 
         # load motion
-        # self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
+        self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
 
         # DOF and key body indexes
         # key_body_names = ["right_hand", "left_hand", "right_foot", "left_foot"]
-        # self.ref_body_index = self.robot.data.body_names.index(self.cfg.reference_body)
+        self.ref_body_index = self.robot.data.body_names.index(self.cfg.reference_body)
         # self.key_body_indexes = [self.robot.data.body_names.index(name) for name in key_body_names]
-        # self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)
-        # self.motion_ref_body_index = self._motion_loader.get_body_index([self.cfg.reference_body])[0]
+        self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)
+        self.motion_ref_body_index = self._motion_loader.get_body_index([self.cfg.reference_body])[0]
         # self.motion_key_body_indexes = self._motion_loader.get_body_index(key_body_names)
 
-        self.ref_body_index = self.robot.data.body_names.index(self.cfg.reference_body)
-        # self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)  # 按motion的顺序
-        # self.motion_ref_body_index = self._motion_loader.get_body_index([self.cfg.reference_body])[0]
-        # print("在motion中关节索引:", self.motion_dof_indexes)
-        # print("在motion中body索引:", self._motion_loader.get_body_index(self.robot.data.body_names))
-        
-
-        # # reconfigure AMP observation space according to the number of observations and create the buffer
-        # self.amp_observation_size = self.cfg.num_amp_observations * self.cfg.amp_observation_space
-        # self.amp_observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.amp_observation_size,))
-        # self.amp_observation_buffer = torch.zeros(
-        #     (self.num_envs, self.cfg.num_amp_observations, self.cfg.amp_observation_space), device=self.device
-        # )
+        # reconfigure AMP observation space according to the number of observations and create the buffer
+        self.amp_observation_size = self.cfg.num_amp_observations * self.cfg.amp_observation_space
+        self.amp_observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.amp_observation_size,))
+        self.amp_observation_buffer = torch.zeros(
+            (self.num_envs, self.cfg.num_amp_observations, self.cfg.amp_observation_space), device=self.device
+        )
 
 
         "“”额外关节索引"""
+        print("Joint names:", self.robot.data.joint_names)
+        print("Body names:", self.robot.data.body_names)
+        print("Num DOFs:", len(self.robot.data.joint_names))
+        print("Num DOFs:", len(self.robot.data.body_names))
+        # 原始的人体模型顺序（exo）
         self.HUMAN_UPPER_JOINTS = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'neck_x', 'neck_y', 'neck_z', 'right_shoulder_x', 'right_shoulder_y', 'right_shoulder_z', 
                                 'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'right_elbow', 'left_elbow']
         self.HUMAN_LOWER_JOINTS = ['right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 
                                    'right_knee', 'left_knee', 'right_ankle_x', 'right_ankle_y', 'right_ankle_z', 'left_ankle_x', 'left_ankle_y', 'left_ankle_z']
         self.human_upper_dof_indices = [self.robot.data.joint_names.index(name) for name in self.HUMAN_UPPER_JOINTS]
         self.human_lower_dof_indices = [self.robot.data.joint_names.index(name) for name in self.HUMAN_LOWER_JOINTS]
-        self.human_simple_dof_indices = [self.robot.data.joint_names.index(name) for name in self.HUMAN_SIMPLE_JOINTS]
         # 关键关节
         self.human_knee_joint_names = ["right_knee", "left_knee"]
         self.human_hip_joint_names = ["right_hip_y", "left_hip_y"]
@@ -117,15 +106,14 @@ class KneeSimpleHumanoidDistillationEnv(DirectRLEnv):
         self.human_hip_indices = [self.robot.data.joint_names.index(name) for name in self.human_hip_joint_names]
 
         # 外骨骼offset and scale
-        self.exo_scale_ratio = 1.0  # 外骨骼动作缩放比例
-        self.exo_action_scale = (dof_upper_limits[self.human_knee_indices] - dof_lower_limits[self.human_knee_indices]) * self.exo_scale_ratio
-        self.exo_action_offset = (dof_upper_limits[self.human_knee_indices] + dof_lower_limits[self.human_knee_indices])*0.5
-        print(self.exo_action_scale, self.exo_action_offset)
+        # self.exo_effort_scale = 5
+        self.exo_effort_scale = 100
+        self.exo_effort_offset = 0
 
 
         """力矩日志"""
         self.log_torque = True  # 控制是否记录力矩（可在配置文件中设置）
-        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_simple_humanoid_amp/d_torque_logs"
+        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_amp/torque-effort_logs"
         self.torque_log_file = None  # 日志文件对象
         self.torque_writer = None
         self.timestep = 0
@@ -134,7 +122,7 @@ class KneeSimpleHumanoidDistillationEnv(DirectRLEnv):
         if self.log_torque and is_simulation:
             os.makedirs(self.torque_log_dir, exist_ok=True)
             timestamp = time.strftime("%Y%m%d_%H%M%S")
-            self.torque_log_path = f"{self.torque_log_dir}/energe_simple_torque_{timestamp}.csv"
+            self.torque_log_path = f"{self.torque_log_dir}/torque-effort_{timestamp}.csv"
             try:
                 self.torque_log_file = open(self.torque_log_path, "w", newline="", encoding="utf-8")
                 self.torque_writer = csv.writer(self.torque_log_file)
@@ -149,71 +137,17 @@ class KneeSimpleHumanoidDistillationEnv(DirectRLEnv):
         if self.log_torque:
             self.sim.add_physics_callback("torque_log_callback", self._record_data)
             print("[INFO] 仿真回调绑定成功，将每帧记录力矩数据")
-        
+
 
         """添加 TensorBoard writer"""
-        log_dir = os.path.join("runs/d_kneesimplehumanamp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        log_dir = os.path.join("runs/knee_effort_human_amp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
         self.writer1 = SummaryWriter(log_dir=log_dir)
-        self.max_episodes = 8000  # horizon_length*max_epochs（总步数）
+        self.max_episodes = 800  # horizon_length*max_epochs（总步数）
         self.envs_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境各自的回合
         self.episode_count = 0  # 同步完成回合数
         self.episode_rewards = np.zeros(self.num_envs, dtype=np.float32)  # 回合总奖励(清零版)
         self.envs_episode_rewards = np.zeros((self.num_envs, int(self.max_episodes)), dtype=np.float32)  # 存储每个环境的奖励
         self.global_frame = 0  # 全局帧计数器
-
-        print("环境初始化成功")
-        self.teacher_actor = None  # 手动构建的SKRL教师网络
-        self.teacher_obs_normalizer = None  # SKRL的观测归一化器
-        self.teacher_obs = None  # 存储补全后的69维教师观测（给教师模型用）
-        # 加载教师模型（仅当启用蒸馏时）
-        if self.cfg.is_distillation and self.cfg.teacher_policy_path:
-            self._load_teacher_policy()
-    
-    def _load_teacher_policy(self):
-        """加载SKRL训练的教师模型（跨框架适配：权重转换+维度对齐）"""
-        try:
-            # 手动构建教师网络（与SKRL结构一致：69→1024→512→30）
-            self.teacher_actor = SimpleMLP(
-                input_dim=self.cfg.teacher_obs_dim,  # （SKRL输入）
-                output_dim=self.cfg.student_obs_dim,    # 30维（与学生动作一致）
-                hidden_dims=[1024, 512],             # 对齐SKRL的网络结构（skrl_walk_amp_cfg.yaml）
-                activation="relu"                    # 对齐SKRL的激活函数
-            ).to(self.device)
-
-            # 加载SKRL权重并转换（解决跨框架键不匹配）
-            checkpoint = torch.load(self.cfg.teacher_policy_path, map_location=self.device)
-            skrl_weights = checkpoint["policy"]  # SKRL的权重存在"policy"键下
-            
-            # 权重键转换：SKRL的"net_container.x" → RSL-RL MLP的"x"，跳过高斯参数log_std_parameter
-            converted_weights = {}
-            for key, value in skrl_weights.items():
-                if "log_std_parameter" in key:  # 跳过SKRL高斯策略的额外参数（学生用确定性动作）
-                    continue
-                if "net_container." in key:     # 转换键名：net_container.0.weight → layers.0.weight
-                    converted_key = key.replace("net_container.", "layers.")
-                    converted_weights[converted_key] = value
-
-            # 加载转换后的权重（strict=False忽略无关键）
-            self.teacher_actor.load_state_dict(converted_weights, strict=False)
-            
-            # 冻结教师网络（仅用于生成参考动作，不更新）
-            for param in self.teacher_actor.parameters():
-                param.requires_grad = False
-            self.teacher_actor.eval()
-            print(f"[INFO] SKRL教师模型加载成功！路径：{self.cfg.teacher_policy_path}")
-
-            # 加载SKRL的观测归一化器（保持观测分布一致）
-            normalizer_path = os.path.join(
-                os.path.dirname(self.cfg.teacher_policy_path),
-                "../obs_normalizer.pth"  # SKRL默认归一化器路径（checkpoints同级目录）
-            )
-            if os.path.exists(normalizer_path):
-                self.teacher_obs_normalizer = torch.load(normalizer_path, map_location=self.device)
-                print(f"[INFO] SKRL观测归一化器加载成功：{normalizer_path}")
-
-        except Exception as e:
-            raise RuntimeError(f"教师模型加载失败：{str(e)}") from e
-        
 
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot)
@@ -247,15 +181,16 @@ class KneeSimpleHumanoidDistillationEnv(DirectRLEnv):
         self.actions = actions.clone()
 
     def _apply_action(self):
-        target = self.action_offset + self.action_scale * self.original_actions
-        exo_pos_offset = self.exo_action_offset + self.exo_action_scale * self.exo_action
-        target[:, self.human_knee_indices] += exo_pos_offset
+        human_target = self.action_offset + self.action_scale * self.original_actions
+        exo_effort_target = self.exo_effort_offset + self.exo_effort_scale * self.exo_action
+        # print(f"目标值类型", human_target.shape, exo_effort_target.shape)
 
-        self.robot.set_joint_position_target(target)
+        self.robot.set_joint_position_target(human_target)
+        self.robot.set_joint_effort_target(exo_effort_target, joint_ids=self.human_knee_indices)  # 前馈力给到膝关节
 
     def _get_observations(self) -> dict:
         # build task observation
-        student_obs = compute_student_obs(
+        obs = compute_obs(
             self.robot.data.joint_pos,
             self.robot.data.joint_vel,
             self.robot.data.body_pos_w[:, self.ref_body_index],
@@ -264,51 +199,31 @@ class KneeSimpleHumanoidDistillationEnv(DirectRLEnv):
             self.robot.data.body_ang_vel_w[:, self.ref_body_index],
             # self.robot.data.body_pos_w[:, self.key_body_indexes],
         )
-        if self.cfg.is_distillation and self.teacher_actor is not None:
-            self.teacher_obs = compute_teacher_obs(
-                self.robot.data.joint_pos,
-                self.robot.data.joint_vel,
-                self.robot.data.body_pos_w[:, self.ref_body_index],
-                self.robot.data.body_quat_w[:, self.ref_body_index],
-                self.robot.data.body_lin_vel_w[:, self.ref_body_index],
-                self.robot.data.body_ang_vel_w[:, self.ref_body_index],
-                # self.robot.data.body_pos_w[:, self.key_body_indexes],
-            )
-        return {"policy": student_obs}
+
+        # update AMP observation history
+        for i in reversed(range(self.cfg.num_amp_observations - 1)):
+            self.amp_observation_buffer[:, i + 1] = self.amp_observation_buffer[:, i]
+        # build AMP observation
+        self.amp_observation_buffer[:, 0] = obs.clone()
+        self.extras = {"amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)}
+
+        return {"policy": obs}
 
     def _get_rewards(self) -> torch.Tensor:
         # return torch.ones((self.num_envs,), dtype=torch.float32, device=self.sim.device)
         joint_torques = self.robot.data.applied_torque  # (num_envs, num_dofs)
         joint_vels = self.robot.data.joint_vel          # (num_envs, num_dofs)
-        key_lower_dof_indices = self.human_hip_indices + self.human_knee_indices
+        key_lower_dof_indices = self.human_knee_indices
+        exo_knee_torque = self.exo_effort_offset + self.exo_effort_scale * self.exo_action
 
-        human_reward = compute_reward(
+        reward = compute_reward(
             joint_torques,
             joint_vels,
-            # self.human_simple_dof_indices,
+            exo_knee_torque,
             self.human_upper_dof_indices,
             self.human_lower_dof_indices,
             key_lower_dof_indices,
-            self.original_actions[:, self.human_knee_indices]
         )
-
-        distill_reward = torch.zeros_like(human_reward)
-        if self.cfg.is_distillation and self.teacher_actor is not None and self.teacher_obs is not None:
-            # 生成教师参考动作（无梯度）
-            with torch.no_grad():
-                # 应用SKRL的观测归一化（保持分布一致）
-                teacher_obs_norm = self.teacher_obs
-                if self.teacher_obs_normalizer is not None:
-                    teacher_obs_norm = self.teacher_obs_normalizer.normalize(teacher_obs_norm)
-                # 教师输出参考动作
-                teacher_actions = self.teacher_actor(teacher_obs_norm)
-            
-            # 计算MSE：学生动作与教师动作的差异（差异越小，奖励越大）
-            action_mse = torch.mean(torch.square(self.actions - teacher_actions), dim=1)
-            distill_reward = torch.exp(-1 * action_mse)
-
-        reward = 0.5 * human_reward + 0.5 * distill_reward
-
         return reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -327,6 +242,9 @@ class KneeSimpleHumanoidDistillationEnv(DirectRLEnv):
 
         if self.cfg.reset_strategy == "default":
             root_state, joint_pos, joint_vel = self._reset_strategy_default(env_ids)
+        elif self.cfg.reset_strategy.startswith("random"):
+            start = "start" in self.cfg.reset_strategy
+            root_state, joint_pos, joint_vel = self._reset_strategy_random(env_ids, start)
         else:
             raise ValueError(f"Unknown reset strategy: {self.cfg.reset_strategy}")
 
@@ -343,7 +261,72 @@ class KneeSimpleHumanoidDistillationEnv(DirectRLEnv):
         joint_vel = self.robot.data.default_joint_vel[env_ids].clone()
         return root_state, joint_pos, joint_vel
 
+    def _reset_strategy_random(
+        self, env_ids: torch.Tensor, start: bool = False
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # sample random motion times (or zeros if start is True)
+        num_samples = env_ids.shape[0]
+        times = np.zeros(num_samples) if start else self._motion_loader.sample_times(num_samples)
+        # sample random motions
+        (
+            dof_positions,
+            dof_velocities,
+            body_positions,
+            body_rotations,
+            body_linear_velocities,
+            body_angular_velocities,
+        ) = self._motion_loader.sample(num_samples=num_samples, times=times)
+
+        # get root transforms (the humanoid torso)
+        motion_torso_index = self._motion_loader.get_body_index(["torso"])[0]
+        root_state = self.robot.data.default_root_state[env_ids].clone()
+        root_state[:, 0:3] = body_positions[:, motion_torso_index] + self.scene.env_origins[env_ids]
+        root_state[:, 2] += 0.15  # lift the humanoid slightly to avoid collisions with the ground
+        root_state[:, 3:7] = body_rotations[:, motion_torso_index]
+        root_state[:, 7:10] = body_linear_velocities[:, motion_torso_index]
+        root_state[:, 10:13] = body_angular_velocities[:, motion_torso_index]
+        # get DOFs state
+        dof_pos = dof_positions[:, self.motion_dof_indexes]
+        dof_vel = dof_velocities[:, self.motion_dof_indexes]
+
+        # update AMP observation
+        amp_observations = self.collect_reference_motions(num_samples, times)
+        self.amp_observation_buffer[env_ids] = amp_observations.view(num_samples, self.cfg.num_amp_observations, -1)
+
+        return root_state, dof_pos, dof_vel
+
+    # env methods
+
+    def collect_reference_motions(self, num_samples: int, current_times: np.ndarray | None = None) -> torch.Tensor:
+        # sample random motion times (or use the one specified)
+        if current_times is None:
+            current_times = self._motion_loader.sample_times(num_samples)
+        times = (
+            np.expand_dims(current_times, axis=-1)
+            - self._motion_loader.dt * np.arange(0, self.cfg.num_amp_observations)
+        ).flatten()
+        # get motions
+        (
+            dof_positions,
+            dof_velocities,
+            body_positions,
+            body_rotations,
+            body_linear_velocities,
+            body_angular_velocities,
+        ) = self._motion_loader.sample(num_samples=num_samples, times=times)
+        # compute AMP observation
+        amp_observation = compute_obs(
+            dof_positions[:, self.motion_dof_indexes],
+            dof_velocities[:, self.motion_dof_indexes],
+            body_positions[:, self.motion_ref_body_index],
+            body_rotations[:, self.motion_ref_body_index],
+            body_linear_velocities[:, self.motion_ref_body_index],
+            body_angular_velocities[:, self.motion_ref_body_index],
+            # body_positions[:, self.motion_key_body_indexes],
+        )
+        return amp_observation.view(-1, self.amp_observation_size)
     
+
     def _record_data(self, dt: float):
         """由仿真回调调用，每帧记录力矩数据"""
         if not self.log_torque or self.torque_writer is None:
@@ -355,17 +338,16 @@ class KneeSimpleHumanoidDistillationEnv(DirectRLEnv):
                 self.timestep += 1
                 return
             # 取第一个环境的力矩数据
+            timestamp = self.sim.current_time
             torque_data = self.robot.data.applied_torque[0].cpu().numpy()
             joint_pos = self.robot.data.joint_pos[0].cpu()
-            joint_vels = self.robot.data.joint_vel[0].cpu()
-            # human_simple_pos = joint_pos[self.human_simple_dof_indices].cpu().numpy()
-            # human_lower_pos = joint_vels[self.human_simple_dof_indices].cpu().numpy()
             human_lower_pos = joint_pos[self.human_lower_dof_indices].cpu().numpy()
-            human_lower_vel = joint_vels[self.human_lower_dof_indices].cpu().numpy()
-            timestamp = self.sim.current_time
-            actions_lower = self.actions[0, 14:].cpu().numpy()  # 所有关节
+            joint_vels = self.robot.data.joint_vel[0].cpu()
+            human_lower_vels = joint_vels[self.human_lower_dof_indices].cpu().numpy()
+            human_lower_actions = self.actions[0, self.human_lower_dof_indices].cpu().numpy()
+            exo_efforts = self.actions[0, -2:].cpu().numpy()
 
-            log_row = [timestamp, self.timestep] + torque_data.tolist() + human_lower_pos.tolist() + human_lower_vel.tolist() + actions_lower.tolist()
+            log_row = [timestamp, self.timestep] + torque_data.tolist() + human_lower_pos.tolist() + human_lower_vels.tolist() + human_lower_actions.tolist() + exo_efforts.tolist()
             self.torque_writer.writerow(log_row)
 
             # 每100帧打印进度
@@ -381,7 +363,7 @@ class KneeSimpleHumanoidDistillationEnv(DirectRLEnv):
         rew_buf = rewards.detach().cpu().numpy() if rewards.requires_grad else rewards.cpu().numpy()
 
         reset_buf = terminated | truncated
-        done_env_ids = reset_buf.nonzero(as_tuple=False).flatten()   # <-- 完全等价于你原来的 self.reset_buf
+        done_env_ids = reset_buf.nonzero(as_tuple=False).flatten()
 
         self.tensorboard_rew(rew_buf, done_env_ids)
 
@@ -399,6 +381,9 @@ class KneeSimpleHumanoidDistillationEnv(DirectRLEnv):
         mean_cumulative_reward = self.episode_rewards.mean()  # 所有环境当前帧平均回合奖励
         self.writer1.add_scalar("reward/frame", mean_cumulative_reward, self.global_frame)
         self.global_frame += 1
+
+        mean_step_reward = np.mean(rewards_np)
+        self.writer1.add_scalar(f"reward/step", mean_step_reward, self.global_frame)
 
         for env_id in done_env_ids:
             ep_reward = self.episode_rewards[env_id]  # 完成回合的环境当前回合总奖励
@@ -444,31 +429,7 @@ def quaternion_to_tangent_and_normal(q: torch.Tensor) -> torch.Tensor:
 
 
 @torch.jit.script
-def compute_student_obs(
-    dof_positions: torch.Tensor,
-    dof_velocities: torch.Tensor,
-    root_positions: torch.Tensor,
-    root_rotations: torch.Tensor,
-    root_linear_velocities: torch.Tensor,
-    root_angular_velocities: torch.Tensor,
-    # key_body_positions: torch.Tensor,
-) -> torch.Tensor:
-    obs = torch.cat(
-        (
-            dof_positions,
-            dof_velocities,
-            root_positions[:, 2:3],  # root body height
-            quaternion_to_tangent_and_normal(root_rotations),
-            # root_linear_velocities,
-            root_angular_velocities,
-            # (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),
-        ),
-        dim=-1,
-    )
-    return obs
-
-@torch.jit.script
-def compute_teacher_obs(
+def compute_obs(
     dof_positions: torch.Tensor,
     dof_velocities: torch.Tensor,
     root_positions: torch.Tensor,
@@ -495,11 +456,10 @@ def compute_teacher_obs(
 def compute_reward(
     joint_torques: torch.Tensor,
     joint_vels: torch.Tensor,
-    # human_simple_dof_indices: list[int],
+    exo_knee_torque: torch.Tensor,
     human_upper_dof_indices: list[int],
     human_lower_dof_indices: list[int],
-    key_lower_dof_indices: list[int],
-    knee_action: torch.Tensor
+    key_lower_dof_insices: list[int],
 ) -> torch.Tensor:
     """
     计算基于关节功率的奖励函数（功率 = 力矩 * 角速度，取绝对值）
@@ -509,15 +469,16 @@ def compute_reward(
         joint_vels: 所有关节的角速度 (num_envs, num_dofs)
         human_upper_indices: 人体上肢关节的索引(list[int])
         human_lower_indices: 人体下肢关节的索引(list[int])
-        knee_action: 外骨骼action
+        exo_lower_indices: 外骨骼下肢关节的索引(list[int])
     """
-
-    """e_distillation"""
-    # 能量
+    joint_torques[:, key_lower_dof_insices] -= exo_knee_torque
     torque_upper = joint_torques[:, human_upper_dof_indices]
     vel_upper = joint_vels[:, human_upper_dof_indices]
     torque_lower = joint_torques[:, human_lower_dof_indices]
     vel_lower = joint_vels[:, human_lower_dof_indices]
+    # print("膝关节力矩：", torque_lower[key_lower_dof_insices])
+    # print("外骨骼力矩：", exo_knee_torque)
+
     power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)
     power_dof_upper = torch.abs(torque_upper * vel_upper)
     power_dof_lower = torch.abs(torque_lower * vel_lower)
@@ -525,18 +486,11 @@ def compute_reward(
                                          dtype=power_dof_upper.dtype, device="cuda").reshape(1, 14)
     power_lower = torch.sum(power_dof_lower_scale * power_dof_lower, dim=1)
     total_power = 0.3 * power_upper + 0.7 * power_lower
-    knee_action_sum = torch.sum(torch.abs(knee_action), dim=1)
-    reward_action = - torch.pow(0.5 * knee_action_sum, exponent=2)
+    
     # 缩放功率，避免奖励过小(以力矩为100左右，具体需调整模型力矩限制)
-    reward_power = 1.0 / (total_power / 1000.0 + 1.0)
+    reward_power = 1.0 / (total_power / 800.0 + 1.0)
     
-    # 膝关节action惩罚
-    knee_action_sum = torch.sum(torch.abs(knee_action), dim=1)
-    reward_action = - torch.pow(0.5 * knee_action_sum, exponent=2)
 
-
-
-    
-    reward = reward_power + reward_action
+    reward = reward_power
 
     return reward

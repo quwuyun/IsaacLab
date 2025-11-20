@@ -21,31 +21,26 @@ MOTIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "motions"
 
 
 @configclass
-class KneeSimpleHumanoidDistillationEnvCfg(DirectRLEnvCfg):
-    """Knee Lower Humanoid Distillation environment config (base class)."""
+class KneeEffortSimpleHumanoidAmpEnvCfg(DirectRLEnvCfg):
+    """Knee Simple Humanoid AMP environment config (base class)."""
 
     # env
     episode_length_s = 10.0
     decimation = 2
 
     # spaces
-    observation_space = 66  # 81-12-3 减去线速度
-    action_space = 28+2  # 添加两个膝关节动作
+    observation_space = 81-12
+    action_space = 28+2  # 添加两个膝关节动作，前馈力矩
     state_space = 0
-    # num_amp_observations = 2
-    # amp_observation_space = 69
-
-    is_distillation = True  # 启用蒸馏模式
-    teacher_policy_path = "/home/hy/IsaacLab/logs/skrl/d_knee_simple_humanoid_amp/2025-11-15_14-46-05_amp_torch/checkpoints/agent_200000.pt"
-    teacher_obs_dim = 69   # 教师原始观测维度（与SKRL训练一致）
-    student_obs_dim = 30
+    num_amp_observations = 2
+    amp_observation_space = 81-12
 
     early_termination = True
-    termination_height = 0.5  # 0.5
+    termination_height = 0.5
 
-    # motion_file: str = MISSING
+    motion_file: str = MISSING
     reference_body = "torso"
-    reset_strategy = "default"  # default, random, random-start
+    reset_strategy = "random"  # default, random, random-start
     """Strategy to be followed when resetting each environment (humanoid's pose and joint states).
 
     * default: pose and joint states are set to the initial state of the asset.
@@ -81,16 +76,16 @@ class KneeSimpleHumanoidDistillationEnvCfg(DirectRLEnvCfg):
     )
 
 
-# @configclass
-# class KneeSimpleHumanoidDistillationDanceEnvCfg(KneeSimpleHumanoidDistillationEnvCfg):
-#     motion_file = os.path.join(MOTIONS_DIR, "humanoid_dance.npz")
+@configclass
+class KneeEffortSimpleHumanoidAmpDanceEnvCfg(KneeEffortSimpleHumanoidAmpEnvCfg):
+    motion_file = os.path.join(MOTIONS_DIR, "humanoid_dance.npz")
 
 
-# @configclass
-# class KneeSimpleHumanoidDistillationRunEnvCfg(KneeSimpleHumanoidDistillationEnvCfg):
-#     motion_file = os.path.join(MOTIONS_DIR, "humanoid_run.npz")
+@configclass
+class KneeEffortSimpleHumanoidAmpRunEnvCfg(KneeEffortSimpleHumanoidAmpEnvCfg):
+    motion_file = os.path.join(MOTIONS_DIR, "humanoid_run.npz")
 
 
-# @configclass
-# class KneeSimpleHumanoidDistillationWalkEnvCfg(KneeSimpleHumanoidDistillationEnvCfg):
-#     motion_file = os.path.join(MOTIONS_DIR, "humanoid_walk.npz")
+@configclass
+class KneeEffortSimpleHumanoidAmpWalkEnvCfg(KneeEffortSimpleHumanoidAmpEnvCfg):
+    motion_file = os.path.join(MOTIONS_DIR, "humanoid_walk.npz")

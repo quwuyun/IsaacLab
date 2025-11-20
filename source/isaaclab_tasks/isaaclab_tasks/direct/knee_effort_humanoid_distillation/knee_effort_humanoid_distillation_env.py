@@ -16,7 +16,7 @@ from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import quat_apply
 
 from .knee_effort_humanoid_distillation_env_cfg import KneeEffortHumanoidDistillationEnvCfg
-from .motions import MotionLoader
+# from .motions import MotionLoader
 
 import time
 import os
