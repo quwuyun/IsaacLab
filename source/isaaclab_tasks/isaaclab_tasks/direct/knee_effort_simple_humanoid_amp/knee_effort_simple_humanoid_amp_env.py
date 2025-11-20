@@ -149,6 +149,10 @@ class KneeEffortSimpleHumanoidAmpEnv(DirectRLEnv):
         self.envs_episode_rewards = np.zeros((self.num_envs, int(self.max_episodes)), dtype=np.float32)  # 存储每个环境的奖励
         self.global_frame = 0  # 全局帧计数器
 
+        # 前进奖励根节点x位置
+        self.prev_root_x = torch.zeros(self.num_envs, device=self.device)
+
+
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot)
         # add ground plane
@@ -224,8 +228,16 @@ class KneeEffortSimpleHumanoidAmpEnv(DirectRLEnv):
             self.human_lower_dof_indices,
             key_lower_dof_indices,
         )
+        self.power_reward = power_reward.clone().detach()
 
-        reward = power_reward
+        current_root_x = self.robot.data.body_pos_w[:, self.ref_body_index, 0]
+        forward_delta = current_root_x - self.prev_root_x
+        forward_reward = torch.clamp(forward_delta, -0.1, 0.1)  # 限制范围：-0.1~0.1m/帧
+        forward_reward = torch.sigmoid(forward_reward * 20.0)
+        self.forward_reward = forward_reward.clone().detach()
+        self.forward_reward = forward_reward.clone().detach()
+
+        reward = 0.8 * power_reward + 0.2 * forward_reward
         return reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -380,23 +392,26 @@ class KneeEffortSimpleHumanoidAmpEnv(DirectRLEnv):
         rewards_np = rew_buf.detach().cpu().numpy() if hasattr(rew_buf, "detach") else rew_buf
         self.episode_rewards += rewards_np
 
+        power_rew_np = self.power_reward.cpu().numpy().mean()
+        forward_rew_np = self.forward_reward.cpu().numpy().mean()
+        self.writer1.add_scalar("reward-power/step", power_rew_np, self.global_frame)
+        self.writer1.add_scalar("reward-forward/step", forward_rew_np, self.global_frame)
+
         mean_cumulative_reward = self.episode_rewards.mean()  # 所有环境当前帧平均回合奖励
         self.writer1.add_scalar("reward/frame", mean_cumulative_reward, self.global_frame)
         self.global_frame += 1
-
         mean_step_reward = np.mean(rewards_np)
         self.writer1.add_scalar(f"reward/step", mean_step_reward, self.global_frame)
 
         for env_id in done_env_ids:
             ep_reward = self.episode_rewards[env_id]  # 完成回合的环境当前回合总奖励
             self.envs_episode_rewards[env_id, self.envs_episode_count[env_id]] = ep_reward
-
             if env_id < 10:
                 self.writer1.add_scalar(f"reward/episode_env{env_id}", ep_reward, self.envs_episode_count[env_id])
 
             self.episode_rewards[env_id] = 0.0
             self.envs_episode_count[env_id] += 1
-
+            
         # 完成某回合所有环境平均奖励
         min_episodes = self.envs_episode_count.min()
         while self.episode_count < min_episodes:
