@@ -113,7 +113,7 @@ class KneeEffortSimpleHumanoidAmpEnv(DirectRLEnv):
 
         """力矩日志"""
         self.log_torque = True  # 控制是否记录力矩（可在配置文件中设置）
-        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_amp/torque-effort_logs"
+        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_simple_humanoid_amp/torque-effort_logs"
         self.torque_log_file = None  # 日志文件对象
         self.torque_writer = None
         self.timestep = 0
@@ -140,9 +140,9 @@ class KneeEffortSimpleHumanoidAmpEnv(DirectRLEnv):
 
 
         """添加 TensorBoard writer"""
-        log_dir = os.path.join("runs/knee_effort_human_amp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        log_dir = os.path.join("runs/knee_effort_human_amp/knee_effort_simple_humanoid_amp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
         self.writer1 = SummaryWriter(log_dir=log_dir)
-        self.max_episodes = 800  # horizon_length*max_epochs（总步数）
+        self.max_episodes = 2000  # horizon_length*max_epochs（总步数）
         self.envs_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境各自的回合
         self.episode_count = 0  # 同步完成回合数
         self.episode_rewards = np.zeros(self.num_envs, dtype=np.float32)  # 回合总奖励(清零版)
@@ -216,7 +216,7 @@ class KneeEffortSimpleHumanoidAmpEnv(DirectRLEnv):
         key_lower_dof_indices = self.human_knee_indices
         exo_knee_torque = self.exo_effort_offset + self.exo_effort_scale * self.exo_action
 
-        reward = compute_reward(
+        power_reward = compute_reward(
             joint_torques,
             joint_vels,
             exo_knee_torque,
@@ -224,6 +224,8 @@ class KneeEffortSimpleHumanoidAmpEnv(DirectRLEnv):
             self.human_lower_dof_indices,
             key_lower_dof_indices,
         )
+
+        reward = power_reward
         return reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -488,7 +490,7 @@ def compute_reward(
     total_power = 0.3 * power_upper + 0.7 * power_lower
     
     # 缩放功率，避免奖励过小(以力矩为100左右，具体需调整模型力矩限制)
-    reward_power = 1.0 / (total_power / 800.0 + 1.0)
+    reward_power = 1.0 / (total_power / 1000.0 + 1.0)
     
 
     reward = reward_power
