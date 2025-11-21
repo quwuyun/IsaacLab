@@ -237,7 +237,8 @@ class KneeEffortSimpleHumanoidAmpEnv(DirectRLEnv):
         self.forward_reward = forward_reward.clone().detach()
         self.forward_reward = forward_reward.clone().detach()
 
-        reward = 0.8 * power_reward + 0.2 * forward_reward
+        reward = 0.5 * power_reward + 0.5 * forward_reward
+        self.prev_root_x = current_root_x.clone()
         return reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -265,6 +266,8 @@ class KneeEffortSimpleHumanoidAmpEnv(DirectRLEnv):
         self.robot.write_root_link_pose_to_sim(root_state[:, :7], env_ids)
         self.robot.write_root_com_velocity_to_sim(root_state[:, 7:], env_ids)
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
+
+        self.prev_root_x[env_ids] = root_state[:, 0].clone()
 
     # reset strategies
 
@@ -411,7 +414,7 @@ class KneeEffortSimpleHumanoidAmpEnv(DirectRLEnv):
 
             self.episode_rewards[env_id] = 0.0
             self.envs_episode_count[env_id] += 1
-            
+
         # 完成某回合所有环境平均奖励
         min_episodes = self.envs_episode_count.min()
         while self.episode_count < min_episodes:

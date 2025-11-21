@@ -315,7 +315,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
         forward_reward = torch.sigmoid(forward_reward * 20.0)
         self.forward_reward = forward_reward.clone().detach()
 
-        reward = 0.2 * power_reward + 0.5 * distill_reward + 0.3 * forward_reward
+        reward = 0.3 * power_reward + 0.5 * distill_reward + 0.2 * forward_reward
         self.prev_root_x = current_root_x.clone()
         
         return reward
@@ -345,6 +345,8 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
         self.robot.write_root_link_pose_to_sim(root_state[:, :7], env_ids)
         self.robot.write_root_com_velocity_to_sim(root_state[:, 7:], env_ids)
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
+
+        self.prev_root_x[env_ids] = root_state[:, 0].clone()
 
     # reset strategies
 
@@ -427,7 +429,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
                 self.writer1.add_scalar(f"reward/episode_env{env_id}", ep_reward, self.envs_episode_count[env_id])
             self.episode_rewards[env_id] = 0.0
             self.envs_episode_count[env_id] += 1
-            
+
         # 完成某回合所有环境平均奖励
         min_episodes = self.envs_episode_count.min()
         while self.episode_count < min_episodes:
