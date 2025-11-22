@@ -29,23 +29,23 @@ class KneeEffortHumanoidDistillationEnvCfg(DirectRLEnvCfg):
     decimation = 2
 
     # spaces
-    observation_space = 81-4-12
+    observation_space = 81-4
     action_space = 28+2  # 添加两个膝关节动作，前馈力矩
     state_space = 0
-    # num_amp_observations = 2
-    # amp_observation_space = 81
+    num_amp_observations = 2
+    amp_observation_space = 81-4
 
     is_distillation = True  # 启用蒸馏模式
-    # teacher_policy_path = "/home/hy/IsaacLab/logs/skrl/knee_effort_humanoid_amp/knee_effort_human_amp/2025-11-18_22-26-15_amp_torch/checkpoints/agent_200000.pt"  # 教师模型路径
-    teacher_policy_path = "/home/hy/IsaacLab/logs/skrl/knee_effort_humanoid_amp/knee_effort_simple_humanoid_amp/2025-11-21_15-35-57_amp_torch/checkpoints/agent_200000.pt"
-    teacher_obs_dim = 69  # 教师原始观测维度（与SKRL训练一致）
+    teacher_policy_path = "/home/hy/IsaacLab/logs/skrl/knee_effort_humanoid_amp/knee_effort_human_amp/2025-11-18_22-26-15_amp_torch/checkpoints/agent_200000.pt"  # 教师模型路径
+    # teacher_policy_path = "/home/hy/IsaacLab/logs/skrl/knee_effort_humanoid_amp/knee_effort_simple_humanoid_amp/2025-11-21_15-35-57_amp_torch/checkpoints/agent_200000.pt"
+    teacher_obs_dim = 81  # 教师原始观测维度（与SKRL训练一致）
 
     early_termination = True
     termination_height = 0.5
 
-    # motion_file: str = MISSING
+    motion_file: str = MISSING
     reference_body = "torso"
-    reset_strategy = "default"  # default, random, random-start
+    reset_strategy = "random"  # default, random, random-start
     """Strategy to be followed when resetting each environment (humanoid's pose and joint states).
 
     * default: pose and joint states are set to the initial state of the asset.
@@ -81,16 +81,16 @@ class KneeEffortHumanoidDistillationEnvCfg(DirectRLEnvCfg):
     )
 
 
-# @configclass
-# class KneeEffortHumanoidDistillationDanceEnvCfg(KneeEffortHumanoidDistillationEnvCfg):
-#     motion_file = os.path.join(MOTIONS_DIR, "humanoid_dance.npz")
+@configclass
+class KneeEffortHumanoidDistillationDanceEnvCfg(KneeEffortHumanoidDistillationEnvCfg):
+    motion_file = os.path.join(MOTIONS_DIR, "humanoid_dance.npz")
 
 
-# @configclass
-# class KneeEffortHumanoidDistillationRunEnvCfg(KneeEffortHumanoidDistillationEnvCfg):
-#     motion_file = os.path.join(MOTIONS_DIR, "humanoid_run.npz")
+@configclass
+class KneeEffortHumanoidDistillationRunEnvCfg(KneeEffortHumanoidDistillationEnvCfg):
+    motion_file = os.path.join(MOTIONS_DIR, "humanoid_run.npz")
 
 
-# @configclass
-# class KneeEffortHumanoidDistillationWalkEnvCfg(KneeEffortHumanoidDistillationEnvCfg):
-#     motion_file = os.path.join(MOTIONS_DIR, "humanoid_walk.npz")
+@configclass
+class KneeEffortHumanoidDistillationWalkEnvCfg(KneeEffortHumanoidDistillationEnvCfg):
+    motion_file = os.path.join(MOTIONS_DIR, "humanoid_walk.npz")
