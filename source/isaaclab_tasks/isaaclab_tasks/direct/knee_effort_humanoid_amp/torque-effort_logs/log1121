@@ -1,0 +1,51 @@
+"""全身能量"""
+source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_amp/torque-effort_logs/torque-effort_20251119_003147.csv
+
+@torch.jit.script
+def compute_reward(
+    joint_torques: torch.Tensor,
+    joint_vels: torch.Tensor,
+    exo_knee_torque: torch.Tensor,
+    human_upper_dof_indices: list[int],
+    human_lower_dof_indices: list[int],
+    key_lower_dof_insices: list[int],
+) -> torch.Tensor:
+    """
+    计算基于关节功率的奖励函数（功率 = 力矩 * 角速度，取绝对值）
+    
+    参数:
+        joint_torques: 所有关节的力矩 (num_envs, num_dofs)
+        joint_vels: 所有关节的角速度 (num_envs, num_dofs)
+        human_upper_indices: 人体上肢关节的索引(list[int])
+        human_lower_indices: 人体下肢关节的索引(list[int])
+        exo_lower_indices: 外骨骼下肢关节的索引(list[int])
+    """
+    joint_torques[:, key_lower_dof_insices] -= exo_knee_torque
+    torque_upper = joint_torques[:, human_upper_dof_indices]
+    vel_upper = joint_vels[:, human_upper_dof_indices]
+    torque_lower = joint_torques[:, human_lower_dof_indices]
+    vel_lower = joint_vels[:, human_lower_dof_indices]
+    # print("膝关节力矩：", torque_lower[key_lower_dof_insices])
+    # print("外骨骼力矩：", exo_knee_torque)
+
+    power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)
+    power_dof_upper = torch.abs(torque_upper * vel_upper)
+    power_dof_lower = torch.abs(torque_lower * vel_lower)
+    power_dof_lower_scale = torch.tensor([0.9, 1.2, 0.8, 0.9, 1.2, 0.8, 1.2, 1.2, 0.9, 1.2, 0.8, 0.9, 1.2, 0.8], 
+                                         dtype=power_dof_upper.dtype, device="cuda").reshape(1, 14)
+    power_lower = torch.sum(power_dof_lower_scale * power_dof_lower, dim=1)
+    total_power = 0.3 * power_upper + 0.7 * power_lower
+    
+    # 缩放功率，避免奖励过小(以力矩为100左右，具体需调整模型力矩限制)
+    reward_power = 1.0 / (total_power / 1000.0 + 1.0)
+    
+
+    reward = reward_power
+
+    return reward
+
+
+"""全身能量-膝关节权重+"""
+    power_dof_lower_scale = torch.tensor([0.8, 1.2, 0.7, 0.8, 1.2, 0.7, 1.6, 1.6, 0.8, 1.2, 0.7, 0.8, 1.2, 0.7], 
+                                         dtype=power_dof_upper.dtype, device="cuda").reshape(1, 14)
+# 不对称效果差

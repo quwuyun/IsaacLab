@@ -89,9 +89,9 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
         print(f"动作上限: {dof_upper_limits}")
 
         # DOF and key body indexes
-        key_body_names = ["right_hand", "left_hand", "right_foot", "left_foot"]
+        # key_body_names = ["right_hand", "left_hand", "right_foot", "left_foot"]
         self.ref_body_index = self.robot.data.body_names.index(self.cfg.reference_body)
-        self.key_body_indexes = [self.robot.data.body_names.index(name) for name in key_body_names]
+        # self.key_body_indexes = [self.robot.data.body_names.index(name) for name in key_body_names]
 
 
         "“”额外关节索引"""
@@ -149,7 +149,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
         """添加 TensorBoard writer"""
         log_dir = os.path.join("runs/knee_effort_humanoid_distillation", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
         self.writer1 = SummaryWriter(log_dir=log_dir)
-        self.max_episodes = 800  # horizon_length*max_epochs（总步数）
+        self.max_episodes = 4000  # horizon_length*max_epochs（总步数）
         self.envs_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境各自的回合
         self.episode_count = 0  # 同步完成回合数
         self.episode_rewards = np.zeros(self.num_envs, dtype=np.float32)  # 回合总奖励(清零版)
@@ -261,7 +261,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
             self.robot.data.body_quat_w[:, self.ref_body_index],
             self.robot.data.body_lin_vel_w[:, self.ref_body_index],
             self.robot.data.body_ang_vel_w[:, self.ref_body_index],
-            self.robot.data.body_pos_w[:, self.key_body_indexes],
+            # self.robot.data.body_pos_w[:, self.key_body_indexes],
         )
         if self.cfg.is_distillation and self.teacher_actor is not None:
             self.teacher_obs = compute_teacher_obs(
@@ -271,7 +271,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
                 self.robot.data.body_quat_w[:, self.ref_body_index],  # 躯干四元数（4维）
                 self.robot.data.body_lin_vel_w[:, self.ref_body_index],  # 躯干线速度（3维）
                 self.robot.data.body_ang_vel_w[:, self.ref_body_index],  # 躯干角速度（3维）
-                self.robot.data.body_pos_w[:, self.key_body_indexes],  # 关键体位置（4×3=12维）
+                # self.robot.data.body_pos_w[:, self.key_body_indexes],  # 关键体位置（4×3=12维）
             )
 
         return {"policy": student_obs}
@@ -471,7 +471,7 @@ def compute_student_obs(
     root_rotations: torch.Tensor,
     root_linear_velocities: torch.Tensor,
     root_angular_velocities: torch.Tensor,
-    key_body_positions: torch.Tensor,
+    # key_body_positions: torch.Tensor,
 ) -> torch.Tensor:
     obs = torch.cat(
         (
@@ -481,7 +481,7 @@ def compute_student_obs(
             quaternion_to_tangent_and_normal(root_rotations),
             # root_linear_velocities,
             root_angular_velocities,
-            (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),
+            # (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),
         ),
         dim=-1,
     )
@@ -495,7 +495,7 @@ def compute_teacher_obs(
     root_rotations: torch.Tensor,
     root_linear_velocities: torch.Tensor,
     root_angular_velocities: torch.Tensor,
-    key_body_positions: torch.Tensor,
+    # key_body_positions: torch.Tensor,
 ) -> torch.Tensor:
 
     # # root_linear_velocities = torch.tensor([[1.2, 0.0, 0.0]], device=dof_positions.device)  # 强制设置躯干线速度为1.2m/s，模拟行走状态
@@ -515,7 +515,7 @@ def compute_teacher_obs(
             quaternion_to_tangent_and_normal(root_rotations),  # 6维四元数投影
             root_linear_velocities,  # 3维躯干线速度（教师保留）
             root_angular_velocities,  # 3维躯干角速度
-            (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),  # 12维关键体相对位置
+            # (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),  # 12维关键体相对位置
         ),
         dim=-1,
     )

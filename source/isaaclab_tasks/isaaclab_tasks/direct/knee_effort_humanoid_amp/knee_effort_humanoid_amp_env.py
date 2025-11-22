@@ -140,7 +140,7 @@ class KneeEffortHumanoidAmpEnv(DirectRLEnv):
 
 
         """添加 TensorBoard writer"""
-        log_dir = os.path.join("runs/knee_effort_human_amp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        log_dir = os.path.join("runs/knee_effort_human_amp/knee_effort_human_amp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
         self.writer1 = SummaryWriter(log_dir=log_dir)
         self.max_episodes = 800  # horizon_length*max_epochs（总步数）
         self.envs_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境各自的回合
@@ -482,7 +482,7 @@ def compute_reward(
     power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)
     power_dof_upper = torch.abs(torque_upper * vel_upper)
     power_dof_lower = torch.abs(torque_lower * vel_lower)
-    power_dof_lower_scale = torch.tensor([0.9, 1.2, 0.8, 0.9, 1.2, 0.8, 1.2, 1.2, 0.9, 1.2, 0.8, 0.9, 1.2, 0.8], 
+    power_dof_lower_scale = torch.tensor([0.8, 1.2, 0.7, 0.8, 1.2, 0.7, 1.6, 1.6, 0.8, 1.2, 0.7, 0.8, 1.2, 0.7], 
                                          dtype=power_dof_upper.dtype, device="cuda").reshape(1, 14)
     power_lower = torch.sum(power_dof_lower_scale * power_dof_lower, dim=1)
     total_power = 0.3 * power_upper + 0.7 * power_lower
