@@ -16,11 +16,31 @@ from . import agents
 ##
 
 gym.register(
+    id="Isaac-Knee-Effort-Humanoid-Distillation-Dance-Direct-v0",
+    entry_point=f"{__name__}.knee_effort_humanoid_distillation_env:KneeEffortHumanoidDistillationEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.knee_effort_humanoid_distillation_env_cfg:KneeEffortHumanoidDistillationWalkEnvCfg",
+        "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_dance_amp_cfg.yaml",
+    },
+)
+
+gym.register(
+    id="Isaac-Knee-Effort-Humanoid-Distillation-Run-Direct-v0",
+    entry_point=f"{__name__}.knee_effort_humanoid_distillation_env:KneeEffortHumanoidDistillationEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.knee_effort_humanoid_distillation_env_cfg:KneeEffortHumanoidDistillationWalkEnvCfg",
+        "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_run_amp_cfg.yaml",
+    },
+)
+
+gym.register(
     id="Isaac-Knee-Effort-Humanoid-Distillation-Walk-Direct-v0",
     entry_point=f"{__name__}.knee_effort_humanoid_distillation_env:KneeEffortHumanoidDistillationEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{__name__}.knee_effort_humanoid_distillation_env_cfg:KneeEffortHumanoidDistillationEnvCfg",
+        "env_cfg_entry_point": f"{__name__}.knee_effort_humanoid_distillation_env_cfg:KneeEffortHumanoidDistillationWalkEnvCfg",
         "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_walk_amp_cfg.yaml",
         # "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:KneeEffortHumanoidPPORunnerCfg",
     },

@@ -133,7 +133,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
 
         """力矩日志"""
         self.log_torque = True  # 控制是否记录力矩（可在配置文件中设置）
-        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_distillation/torque-effort_ditillation_logs"
+        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_distillation/torque-effort_distillation_logs"
         self.torque_log_file = None  # 日志文件对象
         self.torque_writer = None
         self.timestep = 0
@@ -337,7 +337,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
         forward_reward = torch.sigmoid(forward_reward * 20.0)
         self.forward_reward = forward_reward.clone().detach()
 
-        reward = 0.5 * power_reward + 0.5 * distill_reward + 0.0 * forward_reward
+        reward = 0.4 * power_reward + 0.4 * distill_reward + 0.2 * forward_reward
         self.prev_root_x = current_root_x.clone()
         
         return reward
@@ -358,9 +358,9 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
 
         if self.cfg.reset_strategy == "default":
             root_state, joint_pos, joint_vel = self._reset_strategy_default(env_ids)
-        # elif self.cfg.reset_strategy.startswith("random"):
-        #     start = "start" in self.cfg.reset_strategy
-        #     root_state, joint_pos, joint_vel = self._reset_strategy_random(env_ids, start)
+        elif self.cfg.reset_strategy.startswith("random"):
+            start = "start" in self.cfg.reset_strategy
+            root_state, joint_pos, joint_vel = self._reset_strategy_random(env_ids, start)
         else:
             raise ValueError(f"Unknown reset strategy: {self.cfg.reset_strategy}")
 
@@ -368,7 +368,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
         self.robot.write_root_com_velocity_to_sim(root_state[:, 7:], env_ids)
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
 
-        # self.prev_root_x[env_ids] = root_state[:, 0].clone()
+        self.prev_root_x[env_ids] = root_state[:, 0].clone()
 
     # reset strategies
 
