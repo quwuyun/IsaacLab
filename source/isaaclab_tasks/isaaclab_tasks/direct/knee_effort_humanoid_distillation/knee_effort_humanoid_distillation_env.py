@@ -323,7 +323,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
                 if self.teacher_obs_normalizer is not None:
                     teacher_obs_norm = self.teacher_obs_normalizer.normalize(teacher_obs_norm)
                 teacher_actions = self.teacher_actor(teacher_obs_norm)
-            
+        
             # MSE：学生动作与教师动作的差异
             action_mse = torch.mean(torch.square(self.actions - teacher_actions), dim=1)
             # distill_reward = torch.exp(-0.1 * action_mse)
