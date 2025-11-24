@@ -31,12 +31,48 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
     def __init__(self, cfg: ExoHumanoidAmpEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
+        current_stiffness = self.robot.data.joint_stiffness.clone()  # (num_envs, num_joints)
+        current_damping = self.robot.data.joint_damping.clone()
+        print(f"初始刚度: {current_stiffness[0]}")
+        print(f"初始阻尼: {current_damping[0]}")
+        stiffness_scale = 0.5
+        damping_scale = 0.5
+        new_stiffness = current_stiffness * stiffness_scale
+        new_damping = current_damping * damping_scale
+        self.robot.write_joint_stiffness_to_sim(new_stiffness)
+        self.robot.write_joint_damping_to_sim(new_damping)
+        print(f"最终刚度: {self.robot.data.joint_stiffness[0]}")
+        print(f"最终阻尼: {self.robot.data.joint_damping[0]}")
+
+        actuator = self.robot.actuators["body"]
+        initial_kp = actuator.stiffness.clone()
+        initial_kd = actuator.damping.clone()
+        print(f"初始kp:{initial_kp[0]}")
+        print(f"初始kd:{initial_kd[0]}")
+        kp_scale = 0.05
+        kd_scale = 0.04   # 0.05
+        new_stiffness = initial_kp * kp_scale
+        new_damping = initial_kd * kd_scale
+        actuator.stiffness[:] = new_stiffness
+        actuator.damping[:] = new_damping
+        print(f"最终kp:{actuator.stiffness[0]}")
+        print(f"最终kd:{actuator.damping[0]}")      
+
+
         print("Joint names:", self.robot.data.joint_names)
         print("Body names:", self.robot.data.body_names)
         print("Num DOFs:", len(self.robot.data.joint_names))
         print("Num DOFs:", len(self.robot.data.body_names))
+        """
+        Joint names: ['abdomen_x', 'abdomen_y', 'abdomen_z', 'right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 'exo_base_x', 'exo_base_y', 'exo_base_z', 
+                    'neck_x', 'neck_y', 'neck_z', 'right_shoulder_x', 'right_shoulder_y', 'right_shoulder_z', 'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'right_knee', 'left_knee', 
+                    'exo_right_hip_x', 'exo_right_hip_y', 'exo_right_hip_z', 'exo_left_hip_x', 'exo_left_hip_y', 'exo_left_hip_z', 'right_elbow', 'left_elbow', 
+                    'right_ankle_x', 'right_ankle_y', 'right_ankle_z', 'left_ankle_x', 'left_ankle_y', 'left_ankle_z', 'exo_right_knee', 'exo_left_knee']
+        Body names: ['pelvis', 'torso', 'right_thigh', 'left_thigh', 'exobase', 'head', 'right_upper_arm', 'left_upper_arm', 'right_shin', 'left_shin', 
+                    'exo_right_thigh', 'exo_left_thigh', 'right_lower_arm', 'left_lower_arm', 'right_foot', 'left_foot', 'exo_right_shin', 'exo_left_shin', 'right_hand', 'left_hand']
+        """
 
-        self.human_joint_names = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'neck_x', 'neck_y', 'neck_z', 'right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 
+        self.human_joint_names = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 'neck_x', 'neck_y', 'neck_z', 
                                   'right_shoulder_x', 'right_shoulder_y', 'right_shoulder_z', 'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'right_knee', 'left_knee', 
                                   'right_elbow', 'left_elbow', 'right_ankle_x', 'right_ankle_y', 'right_ankle_z', 'left_ankle_x', 'left_ankle_y', 'left_ankle_z']
         self.HUMAN_UPPER_JOINTS = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'neck_x', 'neck_y', 'neck_z', 
@@ -44,16 +80,22 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         self.HUMAN_LOWER_JOINTS = ['right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 'right_knee', 'left_knee', 
                                    'right_ankle_x', 'right_ankle_y', 'right_ankle_z', 'left_ankle_x', 'left_ankle_y', 'left_ankle_z']
         
-        self.exo_joint_names = ["exo_D6Joint0:0", "exo_D6Joint0:1", "exo_D6Joint0:2", "exo_right_hip:0", "exo_right_hip:1", "exo_right_hip:2",
-                                "exo_left_hip:0", "exo_left_hip:1", "exo_left_hip:2", "exo_right_knee", "exo_left_knee"]
-        self.human_exo_joint_names = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 'right_knee', 'left_knee']
+        self.exo_joint_names = ["exo_base_x", "exo_base_y", "exo_base_z", "exo_right_hip_x", "exo_right_hip_y", "exo_right_hip_z",
+                                "exo_left_hip_x", "exo_left_hip_y", "exo_left_hip_z", "exo_right_knee", "exo_left_knee"]
+        self.exo_effort_joint_names = ["exo_right_hip_x", "exo_right_hip_y", "exo_right_hip_z", "exo_left_hip_x", "exo_left_hip_y", "exo_left_hip_z", "exo_right_knee", "exo_left_knee"]
         
+        self.human_exo_joint_names = ['right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 'right_knee', 'left_knee']  # 髋和膝初始化与人同步
+
 
         # action offset and scale
         dof_lower_limits = self.robot.data.soft_joint_pos_limits[0, :, 0]
         dof_upper_limits = self.robot.data.soft_joint_pos_limits[0, :, 1]
         self.action_offset = 0.5 * (dof_upper_limits + dof_lower_limits)
         self.action_scale = dof_upper_limits - dof_lower_limits
+        print(f"动作下限: {dof_lower_limits}")
+        print(f"动作上限: {dof_upper_limits}")
+        self.exo_effort_scale = torch.tensor([0, 0, 0, 0, 100, 0, 0, 100, 0, 100, 100], dtype=self.action_scale.dtype, device=self.device).reshape(1, 11)
+        self.exo_effort_offset = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=self.action_offset.dtype, device=self.device).reshape(1, 11)
 
         # load motion
         self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
@@ -65,10 +107,10 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         self.key_body_indexes = [self.robot.data.body_names.index(name) for name in key_body_names]
         self.motion_ref_body_index = self._motion_loader.get_body_index([self.cfg.reference_body])[0]
         self.motion_key_body_indexes = self._motion_loader.get_body_index(key_body_names)
-
-        # self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)  # 关节dof索引数组
-        self.motion_human_dof_indexes = self._motion_loader.get_dof_index(self.human_joint_names)  # 关节dof索引数组
+        # self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)
+        self.motion_human_dof_indexes = self._motion_loader.get_dof_index(self.human_joint_names)  # 只包含人的关节
         print("Motion DOF indexes:", self.motion_human_dof_indexes)
+
         self.human_dof_indices = [self.robot.data.joint_names.index(name) for name in self.human_joint_names]
         self.exo_dof_indices = [self.robot.data.joint_names.index(name) for name in self.exo_joint_names]
         self.human_exo_dof_indices = [self.robot.data.joint_names.index(name) for name in self.human_exo_joint_names]
@@ -103,7 +145,9 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
             try:
                 self.torque_log_file = open(self.torque_log_path, "w", newline="", encoding="utf-8")
                 self.torque_writer = csv.writer(self.torque_log_file)
-                headers = ["timestamp", "timestep"] + self.robot.data.joint_names + [f"vel_{name}" for name in self.HUMAN_LOWER_JOINTS] + [f"vel_{name}" for name in self.exo_joint_names]
+                headers = ["timestamp", "timestep"] + self.robot.data.joint_names + [f"pos_{name}" for name in self.HUMAN_LOWER_JOINTS] + [f"pos_{name}" for name in self.exo_joint_names] \
+                    + [f"vel_{name}" for name in self.HUMAN_LOWER_JOINTS] + [f"vel_{name}" for name in self.exo_joint_names] \
+                    + [f"action_{name}" for name in self.HUMAN_LOWER_JOINTS] + [f"action_exo_{name}" for name in self.exo_joint_names]
                 self.torque_writer.writerow(headers)
                 print(f"[INFO] 力矩日志启动成功！保存至：{self.torque_log_path}")
             except Exception as e:
@@ -116,7 +160,7 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
 
 
         """添加 TensorBoard writer"""
-        log_dir = os.path.join("runs/exohumanamp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        log_dir = os.path.join("runs/exo_effort_human_amp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
         self.writer1 = SummaryWriter(log_dir=log_dir)
         self.max_episodes = 800  # horizon_length*max_epochs（总步数）
         self.envs_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境各自的回合
@@ -124,6 +168,9 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         self.episode_rewards = np.zeros(self.num_envs, dtype=np.float32)  # 回合总奖励(清零版)
         self.envs_episode_rewards = np.zeros((self.num_envs, int(self.max_episodes)), dtype=np.float32)  # 存储每个环境的奖励
         self.global_frame = 0  # 全局帧计数器
+
+        # 前进奖励根节点x位置
+        self.prev_root_x = torch.zeros(self.num_envs, device=self.device)
 
 
     # 设置模拟场景
@@ -154,10 +201,14 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
 
     def _pre_physics_step(self, actions: torch.Tensor):
         self.actions = actions.clone()
+        self.human_actions = self.actions[:, self.human_dof_indices].clone()
+        self.exo_actions = self.actions[:, self.exo_dof_indices].clone()
 
     def _apply_action(self):
-        target = self.action_offset + self.action_scale * self.actions
-        self.robot.set_joint_position_target(target)
+        human_target = self.action_offset + self.action_scale * self.human_actions
+        self.robot.set_joint_position_target(human_target, joint_ids=self.human_dof_indices)
+        exo_target = self.exo_effort_offset + self.exo_effort_scale * self.exo_actions
+        self.robot.set_joint_effort_target(exo_target, joint_ids=self.exo_dof_indices)
 
     def _get_observations(self) -> dict:
         # build task observation
