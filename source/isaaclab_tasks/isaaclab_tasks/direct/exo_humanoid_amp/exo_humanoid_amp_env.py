@@ -79,23 +79,13 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
                                    'right_shoulder_x', 'right_shoulder_y', 'right_shoulder_z', 'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'right_elbow', 'left_elbow']
         self.HUMAN_LOWER_JOINTS = ['right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 'right_knee', 'left_knee', 
                                    'right_ankle_x', 'right_ankle_y', 'right_ankle_z', 'left_ankle_x', 'left_ankle_y', 'left_ankle_z']
-        
-        self.exo_joint_names = ["exo_base_x", "exo_base_y", "exo_base_z", "exo_right_hip_x", "exo_right_hip_y", "exo_right_hip_z",
-                                "exo_left_hip_x", "exo_left_hip_y", "exo_left_hip_z", "exo_right_knee", "exo_left_knee"]
+        self.human_exo_joint_names = ['right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 'right_knee', 'left_knee']  # 读取与外骨骼对应的关节，髋和膝初始化与人同步
         self.exo_effort_joint_names = ["exo_right_hip_x", "exo_right_hip_y", "exo_right_hip_z", "exo_left_hip_x", "exo_left_hip_y", "exo_left_hip_z", "exo_right_knee", "exo_left_knee"]
         
-        self.human_exo_joint_names = ['right_hip_x', 'right_hip_y', 'right_hip_z', 'left_hip_x', 'left_hip_y', 'left_hip_z', 'right_knee', 'left_knee']  # 髋和膝初始化与人同步
 
-
-        # action offset and scale
-        dof_lower_limits = self.robot.data.soft_joint_pos_limits[0, :, 0]
-        dof_upper_limits = self.robot.data.soft_joint_pos_limits[0, :, 1]
-        self.action_offset = 0.5 * (dof_upper_limits + dof_lower_limits)
-        self.action_scale = dof_upper_limits - dof_lower_limits
-        print(f"动作下限: {dof_lower_limits}")
-        print(f"动作上限: {dof_upper_limits}")
-        self.exo_effort_scale = torch.tensor([0, 0, 0, 0, 100, 0, 0, 100, 0, 100, 100], dtype=self.action_scale.dtype, device=self.device).reshape(1, 11)
-        self.exo_effort_offset = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=self.action_offset.dtype, device=self.device).reshape(1, 11)
+        self.exo_joint_names = ["exo_base_x", "exo_base_y", "exo_base_z", "exo_right_hip_x", "exo_right_hip_y", "exo_right_hip_z",
+                                "exo_left_hip_x", "exo_left_hip_y", "exo_left_hip_z", "exo_right_knee", "exo_left_knee"]
+        self.exo_base_joint_names = ["exo_base_x", "exo_base_y", "exo_base_z"]
 
         # load motion
         self._motion_loader = MotionLoader(motion_file=self.cfg.motion_file, device=self.device)
@@ -109,16 +99,27 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         self.motion_key_body_indexes = self._motion_loader.get_body_index(key_body_names)
         # self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)
         self.motion_human_dof_indexes = self._motion_loader.get_dof_index(self.human_joint_names)  # 只包含人的关节
+        self.motion_human_exo_dof_indexes = self._motion_loader.get_dof_index(self.human_exo_joint_names)  # 对应外骨骼驱动的关节
         print("Motion DOF indexes:", self.motion_human_dof_indexes)
 
         self.human_dof_indices = [self.robot.data.joint_names.index(name) for name in self.human_joint_names]
+        self.exo_effort_dof_indices = [self.robot.data.joint_names.index(name) for name in self.exo_effort_joint_names]
         self.exo_dof_indices = [self.robot.data.joint_names.index(name) for name in self.exo_joint_names]
-        self.human_exo_dof_indices = [self.robot.data.joint_names.index(name) for name in self.human_exo_joint_names]
+        self.exo_base_dof_indices = [self.robot.data.joint_names.index(name) for name in self.exo_base_joint_names]
         self.human_upper_dof_indices = [self.robot.data.joint_names.index(name) for name in self.HUMAN_UPPER_JOINTS]
         self.human_lower_dof_indices = [self.robot.data.joint_names.index(name) for name in self.HUMAN_LOWER_JOINTS]
         print("Human DOF indexes:", self.human_dof_indices)
         print("Exo DOF indexes:", self.exo_dof_indices)
-        print("Human-Exo DOF indexes:", self.human_exo_dof_indices)
+
+        # action offset and scale
+        dof_lower_limits = self.robot.data.soft_joint_pos_limits[0, self.human_dof_indices, 0]  # 只包含人体
+        dof_upper_limits = self.robot.data.soft_joint_pos_limits[0, self.human_dof_indices, 1]
+        self.action_offset = 0.5 * (dof_upper_limits + dof_lower_limits)
+        self.action_scale = dof_upper_limits - dof_lower_limits
+        print(f"动作下限: {dof_lower_limits}")
+        print(f"动作上限: {dof_upper_limits}")
+        self.exo_effort_scale = torch.tensor([0, 0, 0, 0, 100, 0, 0, 100, 0, 100, 100], dtype=self.action_scale.dtype, device=self.device).reshape(1, 11)
+        self.exo_effort_offset = torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=self.action_offset.dtype, device=self.device).reshape(1, 11)
 
         # reconfigure AMP observation space according to the number of observations and create the buffer
         self.amp_observation_size = self.cfg.num_amp_observations * self.cfg.amp_observation_space  # 历史长度*空间大小
@@ -162,7 +163,7 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         """添加 TensorBoard writer"""
         log_dir = os.path.join("runs/exo_effort_human_amp", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
         self.writer1 = SummaryWriter(log_dir=log_dir)
-        self.max_episodes = 800  # horizon_length*max_epochs（总步数）
+        self.max_episodes = 4000  # horizon_length*max_epochs（总步数）
         self.envs_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境各自的回合
         self.episode_count = 0  # 同步完成回合数
         self.episode_rewards = np.zeros(self.num_envs, dtype=np.float32)  # 回合总奖励(清零版)
@@ -228,13 +229,12 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
             self.amp_observation_buffer[:, i + 1] = self.amp_observation_buffer[:, i]
         # build AMP observation
         # self.amp_observation_buffer[:, 0] = obs.clone()
-        human_dof_indices_tensor = torch.tensor(self.human_dof_indices, device=obs.device)
-        human_joint_vel_indices = 39 + human_dof_indices_tensor
+        human_joint_vel_indices = 39 + np.array(self.human_dof_indices)
         self.amp_observation_buffer[:, 0] = torch.cat([
             obs[:, self.human_dof_indices],  # 28dof在39dof的关节位置索引
-            obs[:, human_joint_vel_indices],
+            obs[:, human_joint_vel_indices.tolist()],
             obs[:, 78:103]
-            ], dim=-1)  # torso和关键刚体位置
+            ], dim=-1)
         self.extras = {"amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)}  # 扁平化AMP观测值供判别器使用
 
         # 储存关节力矩信息
@@ -255,13 +255,16 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         joint_torques = self.robot.data.applied_torque  # (num_envs, num_dofs)
         joint_vels = self.robot.data.joint_vel          # (num_envs, num_dofs)
         
-        reward = compute_reward(
+        reward, power_upper, power_human_lower = compute_reward(
             joint_torques,
             joint_vels,
             self.human_upper_dof_indices,
             self.human_lower_dof_indices,
-            self.exo_dof_indices
+            self.exo_effort_dof_indices
         )
+
+        self.power_upper = power_upper.clone().detach()
+        self.power_human_lower = power_human_lower.clone().detach()
         return reward
 
     # 终止条件（倒地，超时）
@@ -290,6 +293,8 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         self.robot.write_root_link_pose_to_sim(root_state[:, :7], env_ids)  # 重置根位姿3+4
         self.robot.write_root_com_velocity_to_sim(root_state[:, 7:], env_ids)  # 重置根速度3+3
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)  # 重置关节dof位置和速度1*
+
+        # self.prev_root_x[env_ids] = root_state[:, 0].clone()
 
     # reset strategies
     # 默认重置
@@ -333,8 +338,10 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         dof_vel = torch.zeros((num_samples, 39), device=self.device)
         dof_pos[:, self.human_dof_indices] = dof_positions[:, self.motion_human_dof_indexes]
         dof_vel[:, self.human_dof_indices] = dof_velocities[:, self.motion_human_dof_indexes]
-        dof_pos[:, self.exo_dof_indices] = dof_pos[:, self.human_exo_dof_indices]  # 重置外骨骼关节位置为人体对应刚体位置
-        dof_vel[:, self.exo_dof_indices] = 0.0
+        dof_pos[:, self.exo_effort_dof_indices] = dof_pos[:, self.motion_human_exo_dof_indexes]  # 重置外骨骼下肢关节位置为人体对应刚体位置
+        dof_vel[:, self.exo_effort_dof_indices] = dof_vel[:, self.motion_human_exo_dof_indexes]
+        dof_pos[:, self.exo_base_dof_indices] = 0.0
+        dof_vel[:, self.exo_base_dof_indices] = 0.0
 
         # update AMP observation
         amp_observations = self.collect_reference_motions(num_samples, times)
@@ -372,7 +379,7 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
             body_angular_velocities[:, self.motion_ref_body_index],
             body_positions[:, self.motion_key_body_indexes],
         )
-        return amp_observation.view(-1, self.amp_observation_size)  # AMP参考数据amp_observation
+        return amp_observation.view(-1, self.amp_observation_size)
     
 
     def _record_data(self, dt: float):
@@ -386,15 +393,20 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
                 self.timestep += 1
                 return
             # 取第一个环境的力矩数据
+            timestamp = self.sim.current_time
             torque_data = self.robot.data.applied_torque[0].cpu().numpy()
             joint_pos = self.robot.data.joint_pos[0].cpu()
-            human_lower_pos = joint_pos[self.human_lower_dof_indices].cpu().numpy()
-            joint_vels = self.robot.data.joint_vel[0].cpu()
-            human_lower_vels = joint_vels[self.human_lower_dof_indices].cpu().numpy()
-            timestamp = self.sim.current_time
-            actions_lower = self.actions[0, 14:].cpu().numpy()
+            joint_vel = self.robot.data.joint_vel[0].cpu()
 
-            log_row = [timestamp, self.timestep] + torque_data.tolist() + human_lower_pos.tolist() + human_lower_vels.tolist() + actions_lower.tolist()
+            human_lower_pos = joint_pos[self.human_lower_dof_indices].cpu().numpy()
+            exo_pos = joint_pos[self.exo_dof_indices].cpu().numpy()
+            human_lower_vels = joint_vel[self.human_lower_dof_indices].cpu().numpy()
+            exo_vel = joint_vel[self.exo_dof_indices].cpu().numpy()
+            human_lower_actions = self.actions[0, self.human_lower_dof_indices].cpu().numpy()
+            exo_actions = self.actions[0, self.exo_dof_indices].cpu().numpy()
+
+            log_row = [timestamp, self.timestep] + torque_data.tolist() + human_lower_pos.tolist() + exo_pos.tolist() \
+                + human_lower_vels.tolist() + exo_vel.tolist() + human_lower_actions.tolist() + exo_actions.tolist()
             self.torque_writer.writerow(log_row)
 
             # 每100帧打印进度
@@ -424,9 +436,16 @@ class ExoHumanoidAmpEnv(DirectRLEnv):
         rewards_np = rew_buf.detach().cpu().numpy() if hasattr(rew_buf, "detach") else rew_buf
         self.episode_rewards += rewards_np
 
+        power_upper_np = self.power_upper.cpu().numpy().mean()
+        power_human_lower_np = self.power_human_lower.cpu().numpy().mean()
+        self.writer1.add_scalar("power_upper/step", power_upper_np, self.global_frame)
+        self.writer1.add_scalar("power_human_lower/step", power_human_lower_np, self.global_frame)
+
         mean_cumulative_reward = self.episode_rewards.mean()  # 所有环境当前帧平均回合奖励
         self.writer1.add_scalar("reward/frame", mean_cumulative_reward, self.global_frame)
         self.global_frame += 1
+        mean_step_reward = np.mean(rewards_np)  # 所有环境当前帧平均帧奖励
+        self.writer1.add_scalar(f"reward/step", mean_step_reward, self.global_frame)
 
         for env_id in done_env_ids:
             ep_reward = self.episode_rewards[env_id]  # 完成回合的环境当前回合总奖励
@@ -503,8 +522,8 @@ def compute_reward(
     joint_vels: torch.Tensor,
     human_upper_dof_indices: list[int],
     human_lower_dof_indices: list[int],
-    exo_dof_indices: list[int]
-) -> torch.Tensor:
+    exo_effort_dof_indices: list[int]
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     计算基于关节功率的奖励函数（功率 = 力矩 * 角速度，取绝对值）
     
@@ -519,8 +538,8 @@ def compute_reward(
     vel_upper = joint_vels[:, human_upper_dof_indices]
     torque_human_lower = joint_torques[:, human_lower_dof_indices]
     vel_human_lower = joint_vels[:, human_lower_dof_indices]
-    torque_exo_lower = joint_torques[:, exo_dof_indices]
-    vel_exo_lower = joint_vels[:, exo_dof_indices]
+    torque_exo_lower = joint_torques[:, exo_effort_dof_indices]
+    vel_exo_lower = joint_vels[:, exo_effort_dof_indices]
 
     power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)  # (num_envs,)
     power_human_lower = torch.sum(torch.abs(torque_human_lower * vel_human_lower), dim=1)
@@ -531,5 +550,5 @@ def compute_reward(
     # 缩放功率，避免奖励过小(以力矩为100左右，具体需调整模型力矩限制)
     reward = 1.0 / (total_power / 1000.0 + 1.0)
     
-    return reward
+    return reward, power_upper, power_human_lower
 
