@@ -16,9 +16,15 @@ file8_path = fullfile(base_path, 'knee_human\c_torque_logs\energe_torque_2025111
 % simple_knee_human
 file9_path = fullfile(base_path, 'knee_human\d_torque_logs\energe_torque_20251115_163709.csv');
 
-% effort_human
+% effort_knee_human
 file10_path = fullfile(base_path, 'knee_effort_human\torque-effort_logs\torque-effort_20251119_003147.csv');  % 外骨骼
+file101_path = fullfile(base_path, 'knee_effort_human\torque-effort_logs\torque-effort_20251122_000919.csv');  % 外骨骼
 file11_path = fullfile(base_path, 'human\pd_effort\torque_20251119_160219.csv');  % 人
+% effort_knee_simple_human
+file12_path = fullfile(base_path, 'knee_effort_simple_human\torque-effort_20251121_172748.csv');  % 外骨骼
+
+% distillation
+file13_path = fullfile(base_path, 'knee_distillation\torque-effort_20251123_142427.csv');  % 外骨骼
 
 data1 = readtable(file1_path);
 data2 = readtable(file2_path);
@@ -30,13 +36,16 @@ data7 = readtable(file7_path);
 data8 = readtable(file8_path);
 data9 = readtable(file9_path);
 data10 = readtable(file10_path);
+data101 = readtable(file101_path);
 data11 = readtable(file11_path);
+data12 = readtable(file12_path);
+data13 = readtable(file13_path);
 
 target_columns = [10, 23, 32, 34, 46, 48, 60, 62, 73];  % 髋t，膝t，髋pos，膝pos，髋vel，膝vel，action髋，action膝，r_exo_action
 exo_target_colums = [73, 74];
 
 fs = 60; % 采样频率
-fc = 10;  % 截止频率
+fc = 12;  % 截止频率
 order = 4; % 滤波器阶数
 % 创建巴特沃斯低通滤波器
 [b, a] = butter(order, fc/(fs/2), 'low'); %fc/(fs/2)归一化截止频率
@@ -93,30 +102,38 @@ plot(x, y6_filtered, 'r-', 'LineWidth', 1.2);
 hold off;
 %% energe准则
 
-%% effort外骨骼膝关节力矩
+%% effort外骨骼膝关节力矩(膝关节能量权值变化)
 col_exo_knee = target_columns(9);
 col_exo_human = target_columns(2);
 col_human = target_columns(2);
-y_exo_knee = 100 * data10{301:500, col_exo_knee};
-y_exo_human = data10{301:500, col_exo_human}-100 * data10{301:500, col_exo_knee};
-y_knee = data10{301:500, col_exo_human};
+y_exo_knee = 100 * data101{101:500, col_exo_knee};
+y_exo_human = data101{101:500, col_exo_human}-100 * data101{101:500, col_exo_knee};
+y_knee = data101{101:500, col_exo_human};
 y_human = data11{281:480, col_human};
-x = [1:200]';
+x = [1:400]';
 y_exo_knee_filtered = filtfilt(b, a, y_exo_knee);
 y_exo_human_filtered = filtfilt(b, a, y_exo_human);
 y_knee_filtered = filtfilt(b, a, y_knee);
 y_human_filtered = filtfilt(b, a, y_human);
+
 figure('Name', 'effort对比', 'Position', [100, 100, 800, 600]);
 grid on;
 hold on;
-%plot(x, y_exo_knee, 'b-', 'LineWidth', 0.5);
-%plot(x, y_exo_human, 'y-', 'LineWidth', 1.2);
-%plot(x, y_knee, 'r-', 'LineWidth', 1.2);
+
+error_margin = 0.05 * y_exo_knee_filtered;  % 误差范围
+y_upper = y_exo_knee_filtered + error_margin;  % 上边界
+y_lower = y_exo_knee_filtered - error_margin;  % 下边界
+
+
+%plot(x, y_exo_knee, 'b-', 'LineWidth', 1);
+%plot(x, y_exo_human, 'y-', 'LineWidth', 0.7);
+%plot(x, y_knee, 'r-', 'LineWidth', 1);
 %plot(x, y_human, 'r-', 'LineWidth', 1.2);
 plot(x, y_exo_knee_filtered, 'b-', 'LineWidth', 1.5);
 plot(x, y_exo_human_filtered, 'y-', 'LineWidth', 1.2);
 plot(x, y_knee_filtered, 'r-', 'LineWidth', 1.5);
 %plot(x, y_human_filtered, 'r-', 'LineWidth', 1.2);
+%errorbar(x, y_exo_knee_filtered, e, 'b-')
 
 xlabel('timestep', 'FontSize', 10);
 ylabel('torque/N', 'FontSize', 10);
@@ -124,4 +141,52 @@ legend('exo-torque','human-torque','applied-torque','Location', 'best');  % 自�
 hold off;
 
 %% effort外骨骼膝关节力矩-无keypos
+col_exo_knee_simple = target_columns(9);
+col_exo_human_simple = target_columns(2);
+y_exo_knee_simple = 100 * data12{301:500, col_exo_knee_simple};
+y_applied_knee_simple = data12{301:500, col_exo_human_simple};
+y_exo_human_simple = data12{301:500, col_exo_human_simple}-100 * data12{301:500, col_exo_knee_simple};
+x = [1:200]';
+y_exo_knee_simple_filtered = filtfilt(b, a, y_exo_knee_simple);
+y_applied_knee_simple_filtered = filtfilt(b, a, y_applied_knee_simple);
+y_exo_human_simple_filtered = filtfilt(b, a, y_exo_human_simple);
+figure('Name', 'effort对比', 'Position', [100, 100, 800, 600]);
+grid on;
+hold on;
+plot(x, y_exo_knee_simple, 'b-', 'LineWidth', 1.0);
+plot(x, y_applied_knee_simple, 'r-', 'LineWidth', 1.0);
+plot(x, y_exo_human_simple, 'y-', 'LineWidth', 0.8);
+plot(x, y_exo_knee_simple_filtered, 'b-', 'LineWidth', 1.5);
+plot(x, y_applied_knee_simple_filtered, 'r-', 'LineWidth', 1.5);
+plot(x, y_exo_human_simple_filtered, 'y-', 'LineWidth', 1.2);
 
+xlabel('timestep', 'FontSize', 10);
+ylabel('torque/N', 'FontSize', 10);
+legend('exo-torque','human-torque','applied-torque','Location', 'best');  % 自动放在最佳位置
+hold off;
+
+%% distillation
+col_exo_knee_distillation = target_columns(9);
+col_exo_human_distillation = target_columns(2);
+y_exo_knee_distillation = 100 * data13{361:560, col_exo_knee_distillation};
+y_applied_knee_distillation = data13{361:560, col_exo_human_distillation};
+y_exo_human_distillation = y_applied_knee_distillation - y_exo_knee_distillation;
+x = [1:200]';
+y_exo_knee_distillation_filtered = filtfilt(b, a, y_exo_knee_distillation);
+y_applied_knee_distillation_filtered = filtfilt(b, a, y_applied_knee_distillation);
+y_exo_human_distillation_filtered = filtfilt(b, a, y_exo_human_distillation);
+figure('Name', 'Distillation(77)', 'Position', [100, 100, 800, 600]);
+grid on;
+hold on;
+%plot(x, y_exo_knee_distillation, 'b-', 'LineWidth', 1.0);
+%plot(x, y_applied_knee_distillation, 'r-', 'LineWidth', 1.0);
+%plot(x, y_exo_human_distillation, 'y-', 'LineWidth', 0.8);
+plot(x, y_exo_knee_distillation_filtered, 'b-', 'LineWidth', 1.5);
+plot(x, y_applied_knee_distillation_filtered, 'r-', 'LineWidth', 1.5);
+plot(x, y_exo_human_distillation_filtered, 'y-', 'LineWidth', 1.2);
+
+title('Distillation')
+xlabel('timestep', 'FontSize', 10);
+ylabel('torque/N', 'FontSize', 10);
+legend('exo-torque','human-torque','applied-torque','Location', 'best');  % 自动放在最佳位置
+hold off;

@@ -1,0 +1,14 @@
+"""前进缓慢"""
+logs/skrl/knee_effort_humanoid_distillation/2025-11-22_21-53-36_amp_torch
+runs/knee_effort_humanoid_distillation/20251122_215340
+torque-effort_distillation_logs/torque-effort_20251123_003253.csv
+
+reward = 0.5 * power_reward + 0.5 * distill_reward + 0.0 * forward_reward
+
+
+reward = 0.45 * power_reward + 0.45 * distill_reward + 0.1 * forward_reward
+
+
+
+"""匀速前进"""
+reward = 0.4 * power_reward + 0.4 * distill_reward + 0.2 * forward_reward
