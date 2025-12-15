@@ -158,7 +158,7 @@ def main():
     
     device = CONFIG["device"]
     
-    # ----- 创建环境 -----
+    # 创建环境
     print("[INFO] 创建环境...")
     env_cfg = KneeEffortHumanoidDistillationEnvCfg()
     env_cfg.scene.num_envs = CONFIG["num_envs"]
@@ -172,7 +172,7 @@ def main():
     print(f"[INFO]   - 观测维度: {CONFIG['obs_dim']}")
     print(f"[INFO]   - 动作维度: {CONFIG['action_dim']}")
     
-    # ----- 加载策略 -----
+    # 加载策略
     policy, preprocessor = load_policy(
         CONFIG["checkpoint_path"],
         CONFIG["obs_dim"],
@@ -180,15 +180,12 @@ def main():
         CONFIG["hidden_dims"],
         device
     )
-    
-    # ----- 重置环境 -----
+
     print("[INFO] 重置环境...")
     obs, info = env.reset()
     
     print("[INFO] 开始仿真循环...")
     print("-" * 70)
-    
-    # ----- 仿真主循环 -----
     step = 0
     total_reward = 0.0
     episode_count = 0
