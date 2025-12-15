@@ -39,7 +39,6 @@ CONFIG = {
 }
 
 
-# ============== 4. 策略网络定义 ==============
 class PolicyNetwork(nn.Module):
     """
     策略网络（与SKRL训练时结构一致）
@@ -122,7 +121,7 @@ def load_policy(checkpoint_path: str, obs_dim: int, action_dim: int,
     return policy, preprocessor
 
 
-# ============== 5. 观测处理 ==============
+# 观测处理
 def process_observation(obs) -> torch.Tensor:
     """处理环境返回的观测"""
     if isinstance(obs, dict):
@@ -133,7 +132,7 @@ def process_observation(obs) -> torch.Tensor:
     return obs
 
 
-# ============== 6. 动作修正函数（在这里添加你的修正逻辑）==============
+# 动作修正函数
 def modify_action(action: torch.Tensor) -> torch.Tensor:
     """
     动作修正函数
@@ -143,16 +142,15 @@ def modify_action(action: torch.Tensor) -> torch.Tensor:
     Returns:
         修正后的动作 (num_envs, action_dim)
     """
-    # TODO: 在这里添加你的动作修正逻辑
+    # TODO: 在这里添加修正逻辑
     # 例如:
     # action[:, 0] = action[:, 0] * 0.8  # 缩放第一个关节
     # action = torch.clamp(action, -1.0, 1.0)  # 限幅
     action = action.clone()
-    action[:, 28:30] = action[:, 28:30] * 4
+    action[:, 28:30] = action[:, 28:30] * 4  # 乘以系数后增加了速度
     return action
 
 
-# ============== 7. 主函数 ==============
 def main():
     print("=" * 70)
     print("独立策略验证脚本")
@@ -199,7 +197,7 @@ def main():
     while simulation_app.is_running():
         start_time = time.time()
         
-        # 1. 处理观测
+        # 处理观测
         obs_tensor = process_observation(obs)
         if obs_tensor.device != torch.device(device):
             obs_tensor = obs_tensor.to(device)
@@ -210,45 +208,39 @@ def main():
             obs_normalized = obs_tensor
         obs_normalized = obs_normalized.float()
 
-        # 2. 策略推理
+        # 策略推理
         with torch.inference_mode():
             action = policy.get_action(obs_normalized, deterministic=True)
-        
-        # 3. 动作修正（可选）
+
+        # 动作修正
         action = modify_action(action)
         
-        # 4. 环境步进
+        # 环境step
         obs, reward, terminated, truncated, info = env.step(action)
         
-        # 5. 统计
         step += 1
         reward_val = reward.mean().item()
         total_reward += reward_val
         episode_reward += reward_val
         
-        # 检查回合结束
         if terminated.any():
             episode_count += 1
             print(f"[INFO] 回合 {episode_count} 结束 | 回合奖励: {episode_reward:.4f}")
             episode_reward = 0.0
-        
-        # 定期打印
+
         if step % 100 == 0:
             avg_reward = total_reward / step
             print(f"[INFO] 步数: {step:6d} | 平均奖励: {avg_reward:.4f} | 回合: {episode_count}")
-        
-        # 检查最大步数
+
         if CONFIG["max_steps"] > 0 and step >= CONFIG["max_steps"]:
             print(f"[INFO] 达到最大步数 {CONFIG['max_steps']}")
             break
-        
-        # 实时控制
+
         if CONFIG["real_time"]:
             elapsed = time.time() - start_time
             if elapsed < CONFIG["dt"]:
                 time.sleep(CONFIG["dt"] - elapsed)
     
-    # ----- 结束 -----
     print("=" * 70)
     print("仿真结束")
     print(f"  总步数: {step}")
@@ -259,7 +251,6 @@ def main():
     env.close()
 
 
-# ============== 8. 入口 ==============
 if __name__ == "__main__":
     try:
         main()
