@@ -29,11 +29,11 @@ class KneeEffortHumanoidDistillationEnvCfg(DirectRLEnvCfg):
     decimation = 2
 
     # spaces
-    observation_space = 81-4
+    observation_space = 81-4-12
     action_space = 28+2  # 添加两个膝关节动作，前馈力矩
     state_space = 0
     num_amp_observations = 2
-    amp_observation_space = 81-4
+    amp_observation_space = 81-4-12
 
     is_distillation = True  # 启用蒸馏模式
     teacher_policy_path = "/home/hy/IsaacLab/logs/skrl/knee_effort_humanoid_amp/knee_effort_human_amp/2025-11-18_22-26-15_amp_torch/checkpoints/agent_200000.pt"  # 教师模型路径

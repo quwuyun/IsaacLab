@@ -12,11 +12,16 @@ simulation_app = app_launcher.app
 import torch
 import torch.nn as nn
 import time
+from datetime import datetime
 
 # IsaacLab 导入
 from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab_tasks.direct.knee_effort_humanoid_distillation.knee_effort_humanoid_distillation_env import KneeEffortHumanoidDistillationEnv
 from isaaclab_tasks.direct.knee_effort_humanoid_distillation.knee_effort_humanoid_distillation_env_cfg import KneeEffortHumanoidDistillationEnvCfg
+
+
+from csv_saver import CSVSaver
+saver_test_obs = CSVSaver(filename=f"test_obs{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
 
 CONFIG = {
     # 检查点路径
@@ -147,7 +152,7 @@ def modify_action(action: torch.Tensor) -> torch.Tensor:
     # action[:, 0] = action[:, 0] * 0.8  # 缩放第一个关节
     # action = torch.clamp(action, -1.0, 1.0)  # 限幅
     action = action.clone()
-    action[:, 28:30] = action[:, 28:30] * 4  # 乘以系数后增加了速度
+    action[:, 28:30] = action[:, 28:30] * 1  # 乘以系数后增加了速度
     return action
 
 
@@ -166,6 +171,7 @@ def main():
     env_cfg.motion_file = CONFIG["motion_file"]
 
     env = KneeEffortHumanoidDistillationEnv(cfg=env_cfg)
+    robot = env.scene.articulations["robot"]
 
     print(f"[INFO] 环境创建成功")
     print(f"[INFO]   - 环境数: {CONFIG['num_envs']}")
@@ -214,7 +220,12 @@ def main():
         
         # 环境step
         obs, reward, terminated, truncated, info = env.step(action)
-        
+        print(obs.keys())
+        # saver_test_obs.save_row(obs["policy"][0].cpu().numpy())
+        joint_pos = robot.data.joint_pos  # (num_envs, num_joints)
+        print(f"[DEBUG] 右膝: {joint_pos[0, 20]:.4f}, 左膝: {joint_pos[0, 21]:.4f},"
+              f" 右肘: {joint_pos[0, 22]:.4f}, 左肘: {joint_pos[0, 23]:.4f}")
+
         step += 1
         reward_val = reward.mean().item()
         total_reward += reward_val

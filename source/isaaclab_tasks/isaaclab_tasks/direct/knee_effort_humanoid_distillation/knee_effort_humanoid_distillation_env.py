@@ -162,7 +162,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
         """添加 TensorBoard writer"""
         log_dir = os.path.join("runs/knee_effort_humanoid_distillation", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
         self.writer1 = SummaryWriter(log_dir=log_dir)
-        self.max_episodes = 4000  # horizon_length*max_epochs（总步数）
+        self.max_episodes = 10000  # horizon_length*max_epochs（总步数）
         self.envs_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境各自的回合
         self.episode_count = 0  # 同步完成回合数
         self.episode_rewards = np.zeros(self.num_envs, dtype=np.float32)  # 回合总奖励(清零版)
@@ -568,7 +568,7 @@ def compute_student_obs(
             quaternion_to_tangent_and_normal(root_rotations),
             # root_linear_velocities,
             root_angular_velocities,
-            (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),
+            # (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),
         ),
         dim=-1,
     )

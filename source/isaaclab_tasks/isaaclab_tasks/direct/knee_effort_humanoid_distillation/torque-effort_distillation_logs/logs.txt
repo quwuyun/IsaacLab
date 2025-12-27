@@ -12,3 +12,9 @@ reward = 0.45 * power_reward + 0.45 * distill_reward + 0.1 * forward_reward
 
 """匀速前进"""
 reward = 0.4 * power_reward + 0.4 * distill_reward + 0.2 * forward_reward
+
+
+"""减少手足观测"""
+logs/skrl/knee_effort_humanoid_distillation/2025-12-27_19-25-50_amp_torch
+runs/knee_effort_humanoid_distillation/20251227_192554
+torque-effort_20251227_231126.csv
