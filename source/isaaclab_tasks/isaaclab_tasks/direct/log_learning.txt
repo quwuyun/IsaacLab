@@ -6,9 +6,9 @@
 --checkpoint logs/skrl/exo_humanoid_amp_walk/2025-10-29_17-32-20_amp_torch/checkpoints/agent_80000.pt
 
 绘图
-python ./source/isaaclab_tasks/isaaclab_tasks/direct/exo_humanoid_amp/torque_logs/plot.py \
---log_file ./source/isaaclab_tasks/isaaclab_tasks/direct/exo_humanoid_amp/torque_logs/torque_20251030_185409.csv \
---data_type velocity --joints vel_exo_right_hip:1 vel_right_hip_y
+python ./source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_distillation/torque-effort_distillation_logs/plot.py \
+--log_file ./source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_distillation/torque-effort_distillation_logs/torque-effort_20260103_161212.csv \
+--data_type action --joints action_right_knee action_left_knee
 
 tensorboard:
 tensorboard --logdir=runs

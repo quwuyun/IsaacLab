@@ -39,8 +39,8 @@ class KneeEffortHumanoidRuggedEnvCfg(DirectRLEnvCfg):
     decimation = 2
 
     # spaces
-    observation_space = 77  # 课程式学习观测维度（暂时不变）
-    action_space = 30
+    observation_space = 65  # 课程式学习观测维度
+    action_space = 2  # （外骨骼力矩修正网络）
     state_space = 0
     num_amp_observations = 2
     amp_observation_space = 77

@@ -36,7 +36,7 @@ HUMAN_ACTION_JOINTS = [
     'action_left_hip_x', 'action_left_hip_y', 'action_left_hip_z', 'action_left_knee',
     'action_left_ankle_x', 'action_left_ankle_y', 'action_left_ankle_z'
 ]
-EXO_ACTION_JOINTS = ['action_exo_right_knee', 'action_exo_left_knee']
+EXO_ACTION_JOINTS = ['action_exo_right_knee', 'action_exo_left_knee','action_teacher_left_knee','action_teacher_left_knee']
 ACTION_JOINTS = HUMAN_ACTION_JOINTS + EXO_ACTION_JOINTS
 
 # 基础样式（同类型关节统一风格，确保一致性）

@@ -37,7 +37,7 @@ class KneeEffortHumanoidDistillationEnvCfg(DirectRLEnvCfg):
 
     is_distillation = True  # 启用蒸馏模式
     teacher_policy_path = "/home/hy/IsaacLab/logs/skrl/knee_effort_humanoid_amp/knee_effort_human_amp/2025-11-18_22-26-15_amp_torch/checkpoints/agent_200000.pt"  # 教师模型路径
-    # teacher_policy_path = "/home/hy/IsaacLab/logs/skrl/knee_effort_humanoid_amp/knee_effort_simple_humanoid_amp/2025-11-21_15-35-57_amp_torch/checkpoints/agent_200000.pt"
+    # teacher_policy_path = "/home/hy/IsaacLab/logs/skrl/knee_effort_humanoid_distillation/2026-01-02_22-14-28_amp_torch/checkpoints/agent_400000.pt"  # 教师模型路径
     teacher_obs_dim = 81  # 教师原始观测维度（与SKRL训练一致）
 
     early_termination = True

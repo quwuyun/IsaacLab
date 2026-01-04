@@ -28,21 +28,44 @@ import datetime
 class SimpleMLP(torch.nn.Module):
     def __init__(self, input_dim: int, output_dim: int, hidden_dims: list[int], activation: str = "relu"):
         super().__init__()
-        # 构建网络层
+        # 构建网络
         layers = []
         prev_dim = input_dim
-        for dim in hidden_dims:
-            layers.append(torch.nn.Linear(prev_dim, dim))
-            if activation == "relu":
-                layers.append(torch.nn.ReLU())
-            prev_dim = dim
-        # 输出层（无激活函数，与SKRL的高斯策略输出一致）
+        for hidden_dim in hidden_dims:
+            layers.append(torch.nn.Linear(prev_dim, hidden_dim))
+            layers.append(torch.nn.ReLU())
+            prev_dim = hidden_dim
         layers.append(torch.nn.Linear(prev_dim, output_dim))
-        self.layers = torch.nn.Sequential(*layers)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.layers(x)
+        self.net_container = torch.nn.Sequential(*layers)
+        self.log_std_parameter = torch.nn.Parameter(torch.zeros(output_dim))
+
+    def forward(self, obs: torch.Tensor) -> torch.Tensor:
+        """前向传播，返回动作均值"""
+        return self.net_container(obs)
     
+    def get_action(self, obs: torch.Tensor, deterministic: bool = True) -> torch.Tensor:
+        """获取动作"""
+        mean = self.forward(obs)
+        if deterministic:
+            return mean
+        else:
+            std = torch.exp(self.log_std_parameter)
+            return mean + std * torch.randn_like(mean)
+
+
+class RunningStandardScaler:
+    """SKRL 使用的观测归一化器"""
+    
+    def __init__(self, running_mean: torch.Tensor, running_variance: torch.Tensor, epsilon: float = 1e-8):
+        self.running_mean = running_mean
+        self.running_variance = running_variance
+        self.epsilon = epsilon
+    
+    def normalize(self, obs: torch.Tensor) -> torch.Tensor:
+        """对观测进行归一化: (obs - mean) / sqrt(var + eps)"""
+        return (obs - self.running_mean) / torch.sqrt(self.running_variance + self.epsilon)
+
 
 class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
     cfg: KneeEffortHumanoidDistillationEnvCfg
@@ -136,6 +159,9 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
         self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_distillation/torque-effort_distillation_logs"
         self.torque_log_file = None  # 日志文件对象
         self.torque_writer = None
+        self.obs_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_distillation/torque-effort_distillation_logs"
+        self.obs_log_file = None 
+        # self.obs_writer = None
         self.timestep = 0
         # 仅在仿真模式（有渲染）时启动日志（不影响训练）
         is_simulation = self.num_envs == 1 or render_mode is not None
@@ -143,13 +169,20 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
             os.makedirs(self.torque_log_dir, exist_ok=True)
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             self.torque_log_path = f"{self.torque_log_dir}/torque-effort_{timestamp}.csv"
+            self.obs_log_path = f"{self.obs_log_dir}/obs_log_{timestamp}.csv"
             try:
                 self.torque_log_file = open(self.torque_log_path, "w", newline="", encoding="utf-8")
                 self.torque_writer = csv.writer(self.torque_log_file)
                 headers = ["timestamp", "timestep"] + self.robot.data.joint_names + [f"pos_{name}" for name in self.HUMAN_LOWER_JOINTS] \
-                + [f"vel_{name}" for name in self.HUMAN_LOWER_JOINTS]  + [f"action_{name}" for name in self.HUMAN_LOWER_JOINTS] + [f"action_exo_{name}" for name in self.human_knee_joint_names]
+                + [f"vel_{name}" for name in self.HUMAN_LOWER_JOINTS]  + [f"action_{name}" for name in self.HUMAN_LOWER_JOINTS] \
+                    + [f"action_exo_{name}" for name in self.human_knee_joint_names]
                 self.torque_writer.writerow(headers)
                 print(f"[INFO] 力矩日志启动成功！保存至：{self.torque_log_path}")
+
+                self.obs_log_file = open(self.obs_log_path, "w", newline="", encoding="utf-8")
+                self.obs_writer = csv.writer(self.obs_log_file)
+                print(f"[INFO] 观测日志启动成功！保存至：{self.obs_log_path}")
+
             except Exception as e:
                 print(f"[ERROR] 日志文件创建失败：{e}")
                 self.log_torque = False  # 创建失败则关闭日志
@@ -174,16 +207,15 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
 
         self.teacher_actor = None  # 手动构建的SKRL教师网络
         self.teacher_obs_normalizer = None  # SKRL的观测归一化器
-        self.teacher_obs = None  # 存储补全后的103维教师观测（给教师模型用）
     
         # 加载教师模型（仅当启用蒸馏时）
         if self.cfg.is_distillation and self.cfg.teacher_policy_path:
             self._load_teacher_policy()
 
     def _load_teacher_policy(self):
-        """加载SKRL训练的教师模型（跨框架适配：权重转换+维度对齐）"""
+        """加载SKRL训练的教师模型"""
         try:
-            # 手动构建教师网络（与SKRL结构一致：103→1024→512→39）
+            # 构建教师网络（与SKRL结构一致：103→1024→512→39）
             self.teacher_actor = SimpleMLP(
                 input_dim=self.cfg.teacher_obs_dim,  # SKRL输入
                 output_dim=30,    # 与学生动作一致
@@ -191,40 +223,46 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
                 activation="relu"                    # 对齐SKRL的激活函数
             ).to(self.device)
 
-            # 加载SKRL权重并转换（解决跨框架键不匹配）
+            # 加载SKRL权重
             checkpoint = torch.load(self.cfg.teacher_policy_path, map_location=self.device)
-            skrl_weights = checkpoint["policy"]  # SKRL的权重存在"policy"键下
+            # SKRL权重在"policy"键下
+            if "policy" in checkpoint:
+                self.teacher_actor.load_state_dict(checkpoint["policy"], strict=True)
+                print("[INFO] 策略网络加载成功！")
+            else:
+                raise KeyError(f"检查点中未找到'policy'键")
             
-            # 权重键转换：SKRL的"net_container.x" → RSL-RL MLP的"x"，跳过高斯参数log_std_parameter
-            converted_weights = {}
-            for key, value in skrl_weights.items():
-                if "log_std_parameter" in key:  # 跳过SKRL高斯策略的额外参数（学生用确定性动作）
-                    continue
-                if "net_container." in key:     # 转换键名：net_container.0.weight → layers.0.weight
-                    converted_key = key.replace("net_container.", "layers.")
-                    converted_weights[converted_key] = value
+            self.teacher_actor.eval()
 
-            # 加载转换后的权重（strict=False忽略无关键）
-            self.teacher_actor.load_state_dict(converted_weights, strict=False)
+            if "state_preprocessor" in checkpoint:
+                sp = checkpoint["state_preprocessor"]
+                running_mean = sp["running_mean"].to(self.device)
+                running_variance = sp["running_variance"].to(self.device)
+                self.teacher_obs_normalizer = RunningStandardScaler(running_mean, running_variance)
+                print("[INFO] 观测归一化预处理器加载成功！")
+                print(f"       - running_mean shape: {running_mean.shape}")
+                print(f"       - running_variance shape: {running_variance.shape}")
+            else:
+                print("[WARN] 检查点中未找到 state_preprocessor, 将不进行观测归一化")
             
             # 冻结教师网络（仅用于生成参考动作，不更新）
             for param in self.teacher_actor.parameters():
                 param.requires_grad = False
-            self.teacher_actor.eval()
-            print(f"[INFO] SKRL教师模型加载成功！路径：{self.cfg.teacher_policy_path}")
 
-            # 加载SKRL的观测归一化器（保持观测分布一致）
-            normalizer_path = os.path.join(
-                os.path.dirname(self.cfg.teacher_policy_path),
-                "../obs_normalizer.pth"  # SKRL默认归一化器路径（checkpoints同级目录）
-            )
-            if os.path.exists(normalizer_path):
-                self.teacher_obs_normalizer = torch.load(normalizer_path, map_location=self.device)
-                print(f"[INFO] SKRL观测归一化器加载成功：{normalizer_path}")
+            print(f"[INFO] SKRL教师模型加载成功!路径：{self.cfg.teacher_policy_path}")
 
         except Exception as e:
             raise RuntimeError(f"教师模型加载失败：{str(e)}") from e
-        
+    
+    # 观测处理
+    def process_observation(self, obs) -> torch.Tensor:
+        """处理环境返回的观测"""
+        if isinstance(obs, dict):
+            if "policy" in obs:
+                return obs["policy"]
+            else:
+                return list(obs.values())[0]
+        return obs
 
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot)
@@ -267,7 +305,8 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
 
     def _get_observations(self) -> dict:
         # build task observation
-        student_obs = compute_student_obs(
+        # self.robot.data.joint_pos[:, self.human_upper_dof_indices] *= 0.0
+        self.student_obs = compute_student_obs(
             self.robot.data.joint_pos,
             self.robot.data.joint_vel,
             self.robot.data.body_pos_w[:, self.ref_body_index],
@@ -276,6 +315,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
             self.robot.data.body_ang_vel_w[:, self.ref_body_index],
             self.robot.data.body_pos_w[:, self.key_body_indexes],
         )
+        # print("关节角度",self.robot.data.joint_pos)
         if self.cfg.is_distillation and self.teacher_actor is not None:
             self.teacher_obs = compute_teacher_obs(
                 self.robot.data.joint_pos,  # 39维关节位置
@@ -291,11 +331,10 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
         for i in reversed(range(self.cfg.num_amp_observations - 1)):
             self.amp_observation_buffer[:, i + 1] = self.amp_observation_buffer[:, i]
         # build AMP observation
-        self.amp_observation_buffer[:, 0] = student_obs.clone()
+        self.amp_observation_buffer[:, 0] = self.student_obs.clone()
         self.extras = {"amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)}
 
-
-        return {"policy": student_obs}
+        return {"policy": self.student_obs}
 
     def _get_rewards(self) -> torch.Tensor:
         # return torch.ones((self.num_envs,), dtype=torch.float32, device=self.sim.device)
@@ -319,10 +358,29 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
             # 生成教师参考动作（无梯度）
             with torch.no_grad():
                 # 应用SKRL的观测归一化（保持分布一致）
-                teacher_obs_norm = self.teacher_obs
+                obs_tensor = self.process_observation(self.teacher_obs)
+                if obs_tensor.device != torch.device(self.device):
+                    obs_tensor = obs_tensor.to(self.device)
                 if self.teacher_obs_normalizer is not None:
-                    teacher_obs_norm = self.teacher_obs_normalizer.normalize(teacher_obs_norm)
-                teacher_actions = self.teacher_actor(teacher_obs_norm)
+                    teacher_obs_norm = self.teacher_obs_normalizer.normalize(obs_tensor)
+                else:
+                    teacher_obs_norm = obs_tensor
+                teacher_obs_norm = teacher_obs_norm.float()
+
+                with torch.inference_mode():
+                    # teacher_actions = self.teacher_actor.get_action(teacher_obs_norm, deterministic=True)
+                    teacher_actions = self.teacher_actor(teacher_obs_norm)
+                    self.teacher_action = teacher_actions
+                    # print(f"[IsaacLab] teacher_actions min/max: {teacher_actions.min():.4f} / {teacher_actions.max():.4f}")
+                    # # 在 _get_rewards 中，推理前添加
+                    # print(f"[IsaacLab] obs_tensor shape: {obs_tensor.shape}")
+                    # print(f"[IsaacLab] obs_tensor dtype: {obs_tensor.dtype}")
+                    # print(f"[IsaacLab] running_mean shape: {self.teacher_obs_normalizer.running_mean.shape}")
+                    # print(f"[IsaacLab] running_variance shape: {self.teacher_obs_normalizer.running_variance.shape}")
+                    # print(f"[IsaacLab] running_mean dtype: {self.teacher_obs_normalizer.running_mean.dtype}")
+                    # print(f"[IsaacLab] teacher_obs_norm min/max: {teacher_obs_norm.min():.4f} / {teacher_obs_norm.max():.4f}")
+                    # print(f"[IsaacLab] teacher_obs_norm[:5]: {teacher_obs_norm[0, :5]}")
+                    # # teacher_actions = self.teacher_actor(teacher_obs_norm)
         
             # MSE：学生动作与教师动作的差异
             action_mse = torch.mean(torch.square(self.actions - teacher_actions), dim=1)
@@ -464,14 +522,18 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
             human_lower_vels = joint_vels[self.human_lower_dof_indices].cpu().numpy()
             human_lower_actions = self.actions[0, self.human_lower_dof_indices].cpu().numpy()
             exo_efforts = self.actions[0, -2:].cpu().numpy()
+            teacher_action = self.teacher_action[0, -2:].cpu().numpy()
+            # teacher_action = self.teacher_action.cpu().numpy()
 
             log_row = [timestamp, self.timestep] + torque_data.tolist() + human_lower_pos.tolist() + human_lower_vels.tolist() + human_lower_actions.tolist() + exo_efforts.tolist()
             self.torque_writer.writerow(log_row)
-
-            # 每100帧打印进度
-            if self.timestep % 100 == 0:
-                print(f"[INFO] 已记录{self.timestep}步力矩数据，当前时间：{timestamp:.2f}s")
-            self.timestep += 1
+            
+            print(f"exo_efforts",exo_efforts)
+            self.obs_writer.writerow([self.student_obs[0, :].cpu().numpy().tolist()])
+            # # 每100帧打印进度
+            # if self.timestep % 100 == 0:
+            #     print(f"[INFO] 已记录{self.timestep}步力矩数据，当前时间：{timestamp:.2f}s")
+            # self.timestep += 1
         except Exception as e:
             print(f"[ERROR] 力矩记录失败：{e}")
 
@@ -560,6 +622,12 @@ def compute_student_obs(
     root_angular_velocities: torch.Tensor,
     key_body_positions: torch.Tensor,
 ) -> torch.Tensor:
+    # dof_positions *= 0.0
+    # dof_velocities *= 0.0
+    # root_rotations = torch.zeros_like(root_rotations)
+    # root_rotations[:, 0] = 1.0  # w = 1，其余为 0
+    # root_angular_velocities *= 0.0
+
     obs = torch.cat(
         (
             dof_positions,

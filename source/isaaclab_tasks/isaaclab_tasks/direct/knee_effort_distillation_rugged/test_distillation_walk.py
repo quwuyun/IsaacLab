@@ -22,10 +22,11 @@ from isaaclab_tasks.direct.knee_effort_humanoid_distillation.knee_effort_humanoi
 
 from csv_saver import CSVSaver
 saver_test_obs = CSVSaver(filename=f"test_obs{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
+saver_test_actions = CSVSaver(filename=f"test_actions{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
 
 CONFIG = {
     # 检查点路径
-    "checkpoint_path": "/home/hy/IsaacLab/logs/skrl/knee_effort_humanoid_distillation/2025-11-23_02-51-40_amp_torch/checkpoints/agent_200000.pt",
+    "checkpoint_path": "/home/hy/IsaacLab/logs/skrl/knee_effort_humanoid_distillation/2026-01-02_22-14-28_amp_torch/checkpoints/agent_400000.pt",
     "motion_file": "/home/hy/IsaacLab/source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_distillation/motions/humanoid_walk.npz",
 
     # 环境配置
@@ -33,7 +34,7 @@ CONFIG = {
     "device": "cuda:0",
     
     # 网络结构（必须与训练时一致）
-    "obs_dim": 77,        # 观测维度
+    "obs_dim": 65,        # 观测维度
     "action_dim": 30,     # 动作维度
     "hidden_dims": [1024, 512],  # 隐藏层
     
@@ -217,14 +218,22 @@ def main():
 
         # 动作修正
         action = modify_action(action)
-        
+
+        print(f"[IsaacLab] obs_tensor[0, :5]: {obs_tensor[0, :5].tolist()}")
+        print(f"[IsaacLab] running_mean[:5]: {preprocessor.running_mean[:5].tolist()}")
+        print(f"[IsaacLab] running_variance[:5]: {preprocessor.running_variance[:5].tolist()}")
+        print(f"[IsaacLab] obs_normalized[0, :5]: {obs_normalized[0, :5].tolist()}")
+        print(f"[IsaacLab] action[0, 28:30]: {action[0, 28:30].tolist()}")
+        print(action[0, -2:].cpu().numpy())
+
         # 环境step
         obs, reward, terminated, truncated, info = env.step(action)
         print(obs.keys())
-        # saver_test_obs.save_row(obs["policy"][0].cpu().numpy())
-        joint_pos = robot.data.joint_pos  # (num_envs, num_joints)
-        print(f"[DEBUG] 右膝: {joint_pos[0, 20]:.4f}, 左膝: {joint_pos[0, 21]:.4f},"
-              f" 右肘: {joint_pos[0, 22]:.4f}, 左肘: {joint_pos[0, 23]:.4f}")
+        saver_test_obs.save_row(obs["policy"][0].cpu().numpy())
+        saver_test_actions.save_row(action[0, -2:].cpu().numpy())
+        # joint_pos = robot.data.joint_pos  # (num_envs, num_joints)
+        # print(f"[DEBUG] 右膝: {joint_pos[0, 20]:.4f}, 左膝: {joint_pos[0, 21]:.4f},"
+        #       f" 右肘: {joint_pos[0, 22]:.4f}, 左肘: {joint_pos[0, 23]:.4f}")
 
         step += 1
         reward_val = reward.mean().item()
