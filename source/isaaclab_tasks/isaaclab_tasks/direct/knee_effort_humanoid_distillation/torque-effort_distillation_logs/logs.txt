@@ -18,3 +18,11 @@ reward = 0.4 * power_reward + 0.4 * distill_reward + 0.2 * forward_reward
 logs/skrl/knee_effort_humanoid_distillation/2025-12-27_19-25-50_amp_torch
 runs/knee_effort_humanoid_distillation/20251227_192554
 torque-effort_20251227_231126.csv
+
+********************************************************************************
+
+"""观测归一化后"""
+65维度：
+torque-effort_20260104_003639.csv
+obs_log_20260104_003639.csv
+37维度：

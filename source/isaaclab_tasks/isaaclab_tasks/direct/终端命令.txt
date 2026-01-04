@@ -1,5 +1,5 @@
 训练
-./isaaclab.sh -p scripts/reinforcement_learning/skrl/train.py --task Isaac-Exo-Humanoid-AMP-Walk-Direct-v0 --algorithm AMP --num_envs 4096
+./isaaclab.sh -p scripts/reinforcement_learning/skrl/train.py --task Isaac-Knee-Effort-Humanoid-Distillation-Walk-Direct-v0 --algorithm AMP --num_envs 4096 --headless
 
 测试
 ./isaaclab.sh -p scripts/reinforcement_learning/skrl/play.py --task Isaac-Exo-Humanoid-AMP-Walk-Direct-v0 --algorithm AMP --num_envs 1 \

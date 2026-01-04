@@ -5,3 +5,6 @@ effort_knee_distillation-v0
 effort_knee_distillation-v1
     进行观测归一化，输入65-->37
     01-02（65维度）
+
+effort_knee_distillation-v2
+    

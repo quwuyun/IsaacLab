@@ -314,6 +314,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
             self.robot.data.body_lin_vel_w[:, self.ref_body_index],
             self.robot.data.body_ang_vel_w[:, self.ref_body_index],
             self.robot.data.body_pos_w[:, self.key_body_indexes],
+            # self.human_lower_dof_indices,
         )
         # print("关节角度",self.robot.data.joint_pos)
         if self.cfg.is_distillation and self.teacher_actor is not None:
@@ -331,7 +332,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
         for i in reversed(range(self.cfg.num_amp_observations - 1)):
             self.amp_observation_buffer[:, i + 1] = self.amp_observation_buffer[:, i]
         # build AMP observation
-        self.amp_observation_buffer[:, 0] = self.student_obs.clone()
+        self.amp_observation_buffer[:, 0] = self.student_obs.clone()  # 用学生的观测作为AMP观测，类似小登自己借助高级工具
         self.extras = {"amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)}
 
         return {"policy": self.student_obs}
@@ -371,19 +372,9 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
                     # teacher_actions = self.teacher_actor.get_action(teacher_obs_norm, deterministic=True)
                     teacher_actions = self.teacher_actor(teacher_obs_norm)
                     self.teacher_action = teacher_actions
-                    # print(f"[IsaacLab] teacher_actions min/max: {teacher_actions.min():.4f} / {teacher_actions.max():.4f}")
-                    # # 在 _get_rewards 中，推理前添加
-                    # print(f"[IsaacLab] obs_tensor shape: {obs_tensor.shape}")
-                    # print(f"[IsaacLab] obs_tensor dtype: {obs_tensor.dtype}")
-                    # print(f"[IsaacLab] running_mean shape: {self.teacher_obs_normalizer.running_mean.shape}")
-                    # print(f"[IsaacLab] running_variance shape: {self.teacher_obs_normalizer.running_variance.shape}")
-                    # print(f"[IsaacLab] running_mean dtype: {self.teacher_obs_normalizer.running_mean.dtype}")
-                    # print(f"[IsaacLab] teacher_obs_norm min/max: {teacher_obs_norm.min():.4f} / {teacher_obs_norm.max():.4f}")
-                    # print(f"[IsaacLab] teacher_obs_norm[:5]: {teacher_obs_norm[0, :5]}")
-                    # # teacher_actions = self.teacher_actor(teacher_obs_norm)
         
             # MSE：学生动作与教师动作的差异
-            action_mse = torch.mean(torch.square(self.actions - teacher_actions), dim=1)
+            action_mse = torch.mean(torch.square(self.actions - teacher_actions), dim=1)  # 目前最大的问题：外骨骼力矩差异性会被稀释
             # distill_reward = torch.exp(-0.1 * action_mse)
             distill_reward = 1.0 / (1.0 + 0.1 * action_mse)
         self.distill_reward = distill_reward.clone().detach()
@@ -499,6 +490,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
             body_linear_velocities[:, self.motion_ref_body_index],
             body_angular_velocities[:, self.motion_ref_body_index],
             body_positions[:, self.motion_key_body_indexes],
+            # self.human_lower_dof_indices,
         )
         return amp_observation.view(-1, self.amp_observation_size)
     
@@ -527,8 +519,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
 
             log_row = [timestamp, self.timestep] + torque_data.tolist() + human_lower_pos.tolist() + human_lower_vels.tolist() + human_lower_actions.tolist() + exo_efforts.tolist()
             self.torque_writer.writerow(log_row)
-            
-            print(f"exo_efforts",exo_efforts)
+            # print(f"exo_efforts",exo_efforts)
             self.obs_writer.writerow([self.student_obs[0, :].cpu().numpy().tolist()])
             # # 每100帧打印进度
             # if self.timestep % 100 == 0:
@@ -621,17 +612,23 @@ def compute_student_obs(
     root_linear_velocities: torch.Tensor,
     root_angular_velocities: torch.Tensor,
     key_body_positions: torch.Tensor,
+    # lower_body_indices: list[int],  # 下肢关节索引
 ) -> torch.Tensor:
     # dof_positions *= 0.0
     # dof_velocities *= 0.0
     # root_rotations = torch.zeros_like(root_rotations)
     # root_rotations[:, 0] = 1.0  # w = 1，其余为 0
     # root_angular_velocities *= 0.0
+    
+    # lower_dof_positions = dof_positions[:, lower_body_indices]
+    # lower_dof_velocities = dof_velocities[:, lower_body_indices]
 
     obs = torch.cat(
         (
             dof_positions,
             dof_velocities,
+            # lower_dof_positions,
+            # lower_dof_velocities,
             # root_positions[:, 2:3],  # root body height
             quaternion_to_tangent_and_normal(root_rotations),
             # root_linear_velocities,
@@ -652,15 +649,6 @@ def compute_teacher_obs(
     root_angular_velocities: torch.Tensor,
     key_body_positions: torch.Tensor,
 ) -> torch.Tensor:
-
-    # # root_linear_velocities = torch.tensor([[1.2, 0.0, 0.0]], device=dof_positions.device)  # 强制设置躯干线速度为1.2m/s，模拟行走状态
-    # num_envs = dof_positions.shape[0]
-    # root_linear_velocities = torch.full(
-    #     (num_envs, 3),  # 维度：(环境数, 3)
-    #     fill_value=1.2,  # x方向速度1.2m/s
-    #     device=dof_positions.device
-    # )
-    # root_linear_velocities[:, 1:] = 0.0  # y、z方向速度设为0
 
     obs = torch.cat(
         (
