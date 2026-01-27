@@ -15,7 +15,7 @@ from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import quat_apply
 
-from .knee_effort_humanoid_rugged_env_cfg import KneeEffortHumanoidRuggedEnvCfg
+from .knee_effort_rugged_env_cfg import KneeEffortRuggedEnvCfg
 from .motions import MotionLoader
 
 import time
@@ -26,30 +26,52 @@ import datetime
 
 from isaaclab.terrains import TerrainImporter
 
-# 推理base_policy
+
 class SimpleMLP(torch.nn.Module):
     def __init__(self, input_dim: int, output_dim: int, hidden_dims: list[int], activation: str = "relu"):
         super().__init__()
-        # 构建网络层
+        # 构建网络
         layers = []
         prev_dim = input_dim
-        for dim in hidden_dims:
-            layers.append(torch.nn.Linear(prev_dim, dim))
-            if activation == "relu":
-                layers.append(torch.nn.ReLU())
-            prev_dim = dim
-        # 输出层（无激活函数，与SKRL的高斯策略输出一致）
+        for hidden_dim in hidden_dims:
+            layers.append(torch.nn.Linear(prev_dim, hidden_dim))
+            layers.append(torch.nn.ReLU())
+            prev_dim = hidden_dim
         layers.append(torch.nn.Linear(prev_dim, output_dim))
-        self.layers = torch.nn.Sequential(*layers)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.layers(x)
+        self.net_container = torch.nn.Sequential(*layers)
+        self.log_std_parameter = torch.nn.Parameter(torch.zeros(output_dim))
+
+    def forward(self, obs: torch.Tensor) -> torch.Tensor:
+        """前向传播，返回动作均值"""
+        return self.net_container(obs)
     
+    def get_action(self, obs: torch.Tensor, deterministic: bool = True) -> torch.Tensor:
+        """获取动作"""
+        mean = self.forward(obs)
+        if deterministic:
+            return mean
+        else:
+            std = torch.exp(self.log_std_parameter)
+            return mean + std * torch.randn_like(mean)
 
-class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
-    cfg: KneeEffortHumanoidRuggedEnvCfg
 
-    def __init__(self, cfg: KneeEffortHumanoidRuggedEnvCfg, render_mode: str | None = None, **kwargs):
+class RunningStandardScaler:
+    """SKRL 使用的观测归一化器"""
+    def __init__(self, running_mean: torch.Tensor, running_variance: torch.Tensor, epsilon: float = 1e-8):
+        self.running_mean = running_mean
+        self.running_variance = running_variance
+        self.epsilon = epsilon
+    
+    def normalize(self, obs: torch.Tensor) -> torch.Tensor:
+        """对观测进行归一化: (obs - mean) / sqrt(var + eps)"""
+        return (obs - self.running_mean) / torch.sqrt(self.running_variance + self.epsilon)
+
+
+class KneeEffortRuggedEnv(DirectRLEnv):
+    cfg: KneeEffortRuggedEnvCfg
+
+    def __init__(self, cfg: KneeEffortRuggedEnvCfg, render_mode: str | None = None, **kwargs):
         
         """课程式学习相关参数"""
         self.max_terrain_level = 7
@@ -62,8 +84,8 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
         
         super().__init__(cfg, render_mode, **kwargs)
         
-        self.human_actions_dim = 28  # 人体关节
-        self.exo_actions_dim = 2  # 外骨骼修正动作维度（力矩）
+        self.original_actions_dim = 28  # 原始动作维度（角度）
+        self.exo_actions_dim = 2  # 外骨骼动作维度（力矩）
 
         current_stiffness = self.robot.data.joint_stiffness.clone()  # (num_envs, num_joints)
         current_damping = self.robot.data.joint_damping.clone()
@@ -107,6 +129,8 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
         self.ref_body_index = self.robot.data.body_names.index(self.cfg.reference_body)
         key_body_names = ["right_hand", "left_hand", "right_foot", "left_foot"]
         self.key_body_indexes = [self.robot.data.body_names.index(name) for name in key_body_names]
+        foot_names = ["right_foot", "left_foot"]
+        self.foot_indexes = [self.robot.data.body_names.index(name) for name in foot_names]
         self.motion_dof_indexes = self._motion_loader.get_dof_index(self.robot.data.joint_names)
         self.motion_ref_body_index = self._motion_loader.get_body_index([self.cfg.reference_body])[0]
         self.motion_key_body_indexes = self._motion_loader.get_body_index(key_body_names)
@@ -123,7 +147,7 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
         print("Joint names:", self.robot.data.joint_names)
         print("Body names:", self.robot.data.body_names)
         print("Num DOFs:", len(self.robot.data.joint_names))
-        print("Num Bodies:", len(self.robot.data.body_names))
+        print("Num DOFs:", len(self.robot.data.body_names))
         # 原始的人体模型顺序（exo）
         self.HUMAN_UPPER_JOINTS = ['abdomen_x', 'abdomen_y', 'abdomen_z', 'neck_x', 'neck_y', 'neck_z', 'right_shoulder_x', 'right_shoulder_y', 'right_shoulder_z', 
                                 'left_shoulder_x', 'left_shoulder_y', 'left_shoulder_z', 'right_elbow', 'left_elbow']
@@ -136,35 +160,40 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
         self.human_hip_joint_names = ["right_hip_y", "left_hip_y"]
         self.human_knee_indices = [self.robot.data.joint_names.index(name) for name in self.human_knee_joint_names]
         self.human_hip_indices = [self.robot.data.joint_names.index(name) for name in self.human_hip_joint_names]
-        
-        # 崎岖地面特征(足底IMU姿态，)
-        self.rugged_body_names = ["right_foot", "left_foot"]
-        self.rugged_body_indices = [self.robot.data.body_names.index(name) for name in self.rugged_body_names]
 
         # 外骨骼offset and scale
-        self.exo_effort_scale = 100.0
+        self.exo_effort_scale = 100
         self.exo_effort_offset = 0
 
 
         """力矩日志"""
         self.log_torque = True  # 控制是否记录力矩（可在配置文件中设置）
-        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_rugged/torque-effort_rugged_logs"
+        self.torque_log_dir = "/home/hy/IsaacLab/source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_course_rugged/data_logs"
         self.torque_log_file = None  # 日志文件对象
         self.torque_writer = None
+        # self.obs_log_dir = "/home/hy/IsaacLab/source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_course_rugged/data_logs"
+        # self.obs_log_file = None
         self.timestep = 0
         # 仅在仿真模式（有渲染）时启动日志（不影响训练）
         is_simulation = self.num_envs == 1 or render_mode is not None
         if self.log_torque and is_simulation:
             os.makedirs(self.torque_log_dir, exist_ok=True)
             timestamp = time.strftime("%Y%m%d_%H%M%S")
-            self.torque_log_path = f"{self.torque_log_dir}/torque-effort_{timestamp}.csv"
+            self.torque_log_path = f"{self.torque_log_dir}/rugged_coef_{timestamp}.csv"
+            # self.obs_log_path = f"{self.obs_log_dir}/obs_log_{timestamp}.csv"
             try:
                 self.torque_log_file = open(self.torque_log_path, "w", newline="", encoding="utf-8")
                 self.torque_writer = csv.writer(self.torque_log_file)
                 headers = ["timestamp", "timestep"] + self.robot.data.joint_names + [f"pos_{name}" for name in self.HUMAN_LOWER_JOINTS] \
-                + [f"vel_{name}" for name in self.HUMAN_LOWER_JOINTS]  + [f"action_exo_{name}" for name in self.human_knee_joint_names]
+                + [f"vel_{name}" for name in self.HUMAN_LOWER_JOINTS]  + [f"action_{name}" for name in self.HUMAN_LOWER_JOINTS] \
+                    + [f"action_exo_{name}" for name in self.human_knee_joint_names]
                 self.torque_writer.writerow(headers)
                 print(f"[INFO] 力矩日志启动成功！保存至：{self.torque_log_path}")
+
+                # self.obs_log_file = open(self.obs_log_path, "w", newline="", encoding="utf-8")
+                # self.obs_writer = csv.writer(self.obs_log_file)
+                # print(f"[INFO] 观测日志启动成功！保存至：{self.obs_log_path}")
+
             except Exception as e:
                 print(f"[ERROR] 日志文件创建失败：{e}")
                 self.log_torque = False  # 创建失败则关闭日志
@@ -175,9 +204,9 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
 
 
         """添加 TensorBoard writer"""
-        log_dir = os.path.join("runs/knee_effort_humanoid_rugged", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        log_dir = os.path.join("runs/knee_effort_rugged", datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
         self.writer1 = SummaryWriter(log_dir=log_dir)
-        self.max_episodes = 4000  # horizon_length*max_epochs（总步数）
+        self.max_episodes = 10000  # horizon_length*max_epochs（总步数）
         self.envs_episode_count = np.zeros(self.num_envs, dtype=np.int32)  # 每个环境各自的回合
         self.episode_count = 0  # 同步完成回合数
         self.episode_rewards = np.zeros(self.num_envs, dtype=np.float32)  # 回合总奖励(清零版)
@@ -193,76 +222,77 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
         self.terrain_types = torch.randint(0, self.num_terrain_types, (self.num_envs,), device=self.device)
         self.terrain_levels = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)  # 初始从最简单开始
 
-
-        # 基础模型
         self.base_actor = None  # 手动构建的SKRL基础网络
         self.base_obs_normalizer = None  # SKRL的观测归一化器
-        self.base_obs = None  # 存储补全后的77维基础观测（基础模型用）
-        # 加载基础模型
-        if self.cfg.curriculum_enabled and self.cfg.base_policy_path:
+        # 加载基础模型（仅当启用课程时）
+        if self.cfg.is_course and self.cfg.base_policy_path:
             self._load_base_policy()
 
     def _load_base_policy(self):
-        """加载SKRL训练的基础模型:权重转换+维度对齐"""
+        """加载SKRL训练的基础模型"""
         try:
-            # 手动构建基础网络（与SKRL结构一致：103→1024→512→39）
+            # 构建基础网络（与SKRL结构一致：103→1024→512→39）
             self.base_actor = SimpleMLP(
                 input_dim=self.cfg.base_obs_dim,  # SKRL输入
-                output_dim=self.cfg.base_action_dim,
+                output_dim=30,    # 与学生动作一致
                 hidden_dims=[1024, 512],             # 对齐SKRL的网络结构（skrl_walk_amp_cfg.yaml）
                 activation="relu"                    # 对齐SKRL的激活函数
             ).to(self.device)
 
-            # 加载SKRL权重并转换（解决跨框架键不匹配）
+            # 加载SKRL权重
             checkpoint = torch.load(self.cfg.base_policy_path, map_location=self.device)
-            skrl_weights = checkpoint["policy"]  # SKRL的权重存在"policy"键下
-            
-            # 权重键转换：SKRL的"net_container.x" → RSL-RL MLP的"x"，跳过高斯参数log_std_parameter
-            converted_weights = {}
-            for key, value in skrl_weights.items():
-                if "log_std_parameter" in key:  # 跳过SKRL高斯策略的额外参数（学生用确定性动作）
-                    continue
-                if "net_container." in key:     # 转换键名：net_container.0.weight → layers.0.weight
-                    converted_key = key.replace("net_container.", "layers.")
-                    converted_weights[converted_key] = value
+            # SKRL权重在"policy"键下
+            if "policy" in checkpoint:
+                self.base_actor.load_state_dict(checkpoint["policy"], strict=True)
+                print("[INFO] 策略网络加载成功！")
+            else:
+                raise KeyError(f"检查点中未找到'policy'键")
 
-            # 加载转换后的权重（strict=False忽略无关键）
-            self.base_actor.load_state_dict(converted_weights, strict=False)
-            
+            self.base_actor.eval()
+
+            if "state_preprocessor" in checkpoint:
+                sp = checkpoint["state_preprocessor"]
+                running_mean = sp["running_mean"].to(self.device)
+                running_variance = sp["running_variance"].to(self.device)
+                self.base_obs_normalizer = RunningStandardScaler(running_mean, running_variance)
+                print("[INFO] 观测归一化预处理器加载成功！")
+                print(f"       - running_mean shape: {running_mean.shape}")
+                print(f"       - running_variance shape: {running_variance.shape}")
+            else:
+                print("[WARN] 检查点中未找到 state_preprocessor, 将不进行观测归一化")
+
             # 冻结教师网络（仅用于生成参考动作，不更新）
             for param in self.base_actor.parameters():
                 param.requires_grad = False
-            self.base_actor.eval()
-            print(f"[INFO] SKRL教师模型加载成功!路径:{self.cfg.base_policy_path}")
 
-            # 加载SKRL的观测归一化器（保持观测分布一致）
-            normalizer_path = os.path.join(
-                os.path.dirname(self.cfg.base_policy_path),
-                "../obs_normalizer.pth"  # SKRL默认归一化器路径（checkpoints同级目录）
-            )
-            if os.path.exists(normalizer_path):
-                self.base_obs_normalizer = torch.load(normalizer_path, map_location=self.device)
-                print(f"[INFO] SKRL观测归一化器加载成功:{normalizer_path}")
+            print(f"[INFO] SKRL教师模型加载成功!路径：{self.cfg.base_policy_path}")
 
         except Exception as e:
             raise RuntimeError(f"教师模型加载失败：{str(e)}") from e
-        
+    
+    # 观测处理
+    def process_observation(self, obs) -> torch.Tensor:
+        """处理环境返回的观测"""
+        if isinstance(obs, dict):
+            if "policy" in obs:
+                return obs["policy"]
+            else:
+                return list(obs.values())[0]
+        return obs
 
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot)
         # add ground plane
-        # spawn_ground_plane(
-        #     prim_path="/World/ground",
-        #     cfg=GroundPlaneCfg(
-        #         physics_material=sim_utils.RigidBodyMaterialCfg(
-        #             static_friction=1.0,
-        #             dynamic_friction=1.0,
-        #             restitution=0.0,
-        #         ),
-        #     ),
-        # )
-        self.terrain = TerrainImporter(self.cfg.terrain)
-
+        spawn_ground_plane(
+            prim_path="/World/ground",
+            cfg=GroundPlaneCfg(
+                physics_material=sim_utils.RigidBodyMaterialCfg(
+                    static_friction=1.0,
+                    dynamic_friction=1.0,
+                    restitution=0.0,
+                ),
+            ),
+        )
         # clone and replicate
         self.scene.clone_environments(copy_from_source=False)
         # we need to explicitly filter collisions for CPU simulation
@@ -275,85 +305,158 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
-        # 地形原点
-        self.terrain_origins = self.terrain.terrain_origins.clone()
-        # 打印地形信息
-        print(f"地形块: {self.num_terrain_types}类型 * {self.max_terrain_level + 1}难度")
-        print(f"terrain_origins 形状: {self.terrain_origins.shape}")
+    # def _setup_scene(self):
+    #     self.robot = Articulation(self.cfg.robot)
+    #     # add ground plane
+    #     # spawn_ground_plane(
+    #     #     prim_path="/World/ground",
+    #     #     cfg=GroundPlaneCfg(
+    #     #         physics_material=sim_utils.RigidBodyMaterialCfg(
+    #     #             static_friction=1.0,
+    #     #             dynamic_friction=1.0,
+    #     #             restitution=0.0,
+    #     #         ),
+    #     #     ),
+    #     # )
+    #     self.terrain = TerrainImporter(self.cfg.terrain)
 
-    def _set_terrain_position(self, root_state: torch.Tensor, env_ids: torch.Tensor) -> torch.Tensor:
-        """根据每个环境的地形类型和难度等级设置重置位置"""
-        terrain_types = self.terrain_types[env_ids]  # (num_reset_envs,)
-        terrain_levels = self.terrain_levels[env_ids]  # (num_reset_envs,)
-        
-        # 从 terrain_origins 查找对应地形块的中心位置
-        # terrain_origins shape: (num_types, num_levels, 3)
-        terrain_positions = self.terrain_origins[terrain_levels, terrain_types]  # (num_reset_envs, 3)
-        
-        original_env_origins = self.scene.env_origins[env_ids]
+    #     # clone and replicate
+    #     self.scene.clone_environments(copy_from_source=False)
+    #     # we need to explicitly filter collisions for CPU simulation
+    #     if self.device == "cpu":
+    #         self.scene.filter_collisions(global_prim_paths=["/World/ground"])
 
-        local_x = (original_env_origins[:, 0] % 8.0) - 4.0  # 块内 x 偏移 [-4, 4)
-        local_y = (original_env_origins[:, 1] % 8.0) - 4.0  # 块内 y 偏移 [-4, 4)
-        
-        # 更新 root_state 的位置
-        root_state[:, 0] = terrain_positions[:, 0] + local_x * 0.8  # 稍微缩放避免边缘
-        root_state[:, 1] = terrain_positions[:, 1] + local_y * 0.8
-        root_state[:, 2] = terrain_positions[:, 2] + 0.8  # 地面高度 + 0.8m（机器人站立高度）
-        
-        return root_state
+    #     # add articulation to scene
+    #     self.scene.articulations["robot"] = self.robot
+    #     # add lights
+    #     light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
+    #     light_cfg.func("/World/Light", light_cfg)
+
+    #     # 地形原点
+    #     self.terrain_origins = self.terrain.terrain_origins.clone()
+    #     # 打印地形信息
+    #     print(f"地形块: {self.num_terrain_types}类型 * {self.max_terrain_level + 1}难度")
+    #     print(f"terrain_origins 形状: {self.terrain_origins.shape}")
     
-    def _update_curriculum(self, env_ids: torch.Tensor):
-        """更新课程难度"""
-        if not self.cfg.terrain.terrain_generator.curriculum:
-            return
-        if len(env_ids) == 0:
-            return
-        # 表现指标：存活时间比例
-        survival_ratio = self.episode_length_buf[env_ids].float() / self.max_episode_length
+    # def _set_terrain_position(self, root_state: torch.Tensor, env_ids: torch.Tensor) -> torch.Tensor:
+    #     """根据每个环境的地形类型和难度等级设置重置位置"""
+    #     terrain_types = self.terrain_types[env_ids]  # (num_reset_envs,)
+    #     terrain_levels = self.terrain_levels[env_ids]  # (num_reset_envs,)
         
-        # 获取当前难度
-        current_levels = self.terrain_levels[env_ids].clone()
-        new_levels = current_levels.clone()
+    #     # 从 terrain_origins 查找对应地形块的中心位置
+    #     # terrain_origins shape: (num_types, num_levels, 3)
+    #     terrain_positions = self.terrain_origins[terrain_levels, terrain_types]  # (num_reset_envs, 3)
         
-        # 表现好 (>80%) → 升级
-        upgrade_mask = survival_ratio > 0.8
-        new_levels[upgrade_mask] = torch.clamp(
-            current_levels[upgrade_mask] + 1,
-            max=self.max_terrain_level
-        )
-        # 表现差 (<30%) → 降级
-        downgrade_mask = survival_ratio < 0.3
-        new_levels[downgrade_mask] = torch.clamp(
-            current_levels[downgrade_mask] - 1,
-            min=0
-        )
-        self.terrain_levels[env_ids] = new_levels
+    #     original_env_origins = self.scene.env_origins[env_ids]
 
-        # 添加日志记录
-        if self.global_frame % 500 == 0:
-            mean_level = self.terrain_levels.float().mean().item()
-            max_level = self.terrain_levels.max().item()
-            self.writer1.add_scalar("curriculum/mean_terrain_level", mean_level, self.global_frame)
-            self.writer1.add_scalar("curriculum/max_terrain_level", max_level, self.global_frame)
+    #     local_x = (original_env_origins[:, 0] % 8.0) - 4.0  # 块内 x 偏移 [-4, 4)
+    #     local_y = (original_env_origins[:, 1] % 8.0) - 4.0  # 块内 y 偏移 [-4, 4)
+        
+    #     # 更新 root_state 的位置
+    #     root_state[:, 0] = terrain_positions[:, 0] + local_x * 0.8  # 稍微缩放避免边缘
+    #     root_state[:, 1] = terrain_positions[:, 1] + local_y * 0.8
+    #     root_state[:, 2] = terrain_positions[:, 2] + 0.8  # 地面高度 + 0.8m（机器人站立高度）
+        
+    #     return root_state
+    
+    # def _update_curriculum(self, env_ids: torch.Tensor):
+    #     """更新课程难度"""
+    #     if not self.cfg.terrain.terrain_generator.curriculum:
+    #         return
+    #     if len(env_ids) == 0:
+    #         return
+    #     # 表现指标：存活时间比例
+    #     survival_ratio = self.episode_length_buf[env_ids].float() / self.max_episode_length
+        
+    #     # 获取当前难度
+    #     current_levels = self.terrain_levels[env_ids].clone()
+    #     new_levels = current_levels.clone()
+        
+    #     # 表现好 (>80%) → 升级
+    #     upgrade_mask = survival_ratio > 0.8
+    #     new_levels[upgrade_mask] = torch.clamp(
+    #         current_levels[upgrade_mask] + 1,
+    #         max=self.max_terrain_level
+    #     )
+    #     # 表现差 (<30%) → 降级
+    #     downgrade_mask = survival_ratio < 0.3
+    #     new_levels[downgrade_mask] = torch.clamp(
+    #         current_levels[downgrade_mask] - 1,
+    #         min=0
+    #     )
+    #     self.terrain_levels[env_ids] = new_levels
+
+    #     # 添加日志记录
+    #     if self.global_frame % 500 == 0:
+    #         mean_level = self.terrain_levels.float().mean().item()
+    #         max_level = self.terrain_levels.max().item()
+    #         self.writer1.add_scalar("curriculum/mean_terrain_level", mean_level, self.global_frame)
+    #         self.writer1.add_scalar("curriculum/max_terrain_level", max_level, self.global_frame)
 
 
 
     def _pre_physics_step(self, actions: torch.Tensor):
-        self.human_actions = actions[:, :self.human_actions_dim]
-        self.exo_rugged_actions = actions[:, self.human_actions_dim:]
+        # self.original_actions = actions[:, :self.original_actions_dim].clone()
+        # self.exo_action = actions[:, self.original_actions_dim:].clone()
         self.actions = actions.clone()
-        
+
+        # 推理基础策略
+        with torch.no_grad():
+            # 应用SKRL的观测归一化（保持分布一致）
+            obs_tensor = self.process_observation(self.base_obs)
+            if obs_tensor.device != torch.device(self.device):
+                obs_tensor = obs_tensor.to(self.device)
+            if self.base_obs_normalizer is not None:
+                base_obs_norm = self.base_obs_normalizer.normalize(obs_tensor)
+            else:
+                base_obs_norm = obs_tensor
+            base_obs_norm = base_obs_norm.float()
+
+            with torch.inference_mode():
+                base_actions = self.base_actor(base_obs_norm)
+                self.base_action = base_actions
+        self.original_actions = base_actions[:, :self.original_actions_dim].clone()
+        self.exo_action = base_actions[:, self.original_actions_dim:].clone()
+
+        chip_actions = torch.tanh(actions)
+        self.exo_action *= chip_actions  # 系数修正
+
     def _apply_action(self):
-        human_target = self.action_offset + self.action_scale * self.human_actions
-        exo_rugged_effort_target = self.exo_effort_offset + self.exo_effort_scale * self.exo_rugged_actions
+        human_target = self.action_offset + self.action_scale * self.original_actions
+        exo_effort_target = self.exo_effort_offset + self.exo_effort_scale * self.exo_action
         # print(f"目标值类型", human_target.shape, exo_effort_target.shape)
 
+        human_target[:, self.human_upper_dof_indices] *= 0.0  # 上肢关节不动
         self.robot.set_joint_position_target(human_target)
-        self.robot.set_joint_effort_target(exo_rugged_effort_target, joint_ids=self.human_knee_indices)  # 前馈力给到膝关节
+        self.robot.set_joint_effort_target(exo_effort_target, joint_ids=self.human_knee_indices)  # 前馈力给到膝关节
 
     def _get_observations(self) -> dict:
         # build task observation
-        self.rugged_obs = compute_rugged_obs(
+        # self.robot.data.joint_pos[:, self.human_upper_dof_indices] *= 0.0
+        self.student_obs = compute_student_obs(
+            self.robot.data.joint_pos,
+            self.robot.data.joint_vel,
+            self.robot.data.body_quat_w[:, self.ref_body_index],
+            self.robot.data.body_ang_vel_w[:, self.ref_body_index],
+            self.human_lower_dof_indices,
+
+            self.robot.data.body_quat_w[:, self.foot_indexes],
+            self.robot.data.body_ang_vel_w[:, self.foot_indexes],
+        )
+        # print("关节角度",self.robot.data.joint_pos)
+
+        self.base_obs = compute_base_obs(
+            self.robot.data.joint_pos,  # 39维关节位置
+            self.robot.data.joint_vel,  # 39维关节速度
+            self.robot.data.body_pos_w[:, self.ref_body_index],  # 躯干位置（3维）
+            self.robot.data.body_quat_w[:, self.ref_body_index],  # 躯干四元数（4维）
+            self.robot.data.body_lin_vel_w[:, self.ref_body_index],  # 躯干线速度（3维）
+            self.robot.data.body_ang_vel_w[:, self.ref_body_index],  # 躯干角速度（3维）
+            self.robot.data.body_pos_w[:, self.key_body_indexes],  # 关键体位置（4×3=12维）
+            self.human_lower_dof_indices,
+            )
+
+        self.amp_obs = compute_amp_obs(
             self.robot.data.joint_pos,
             self.robot.data.joint_vel,
             self.robot.data.body_pos_w[:, self.ref_body_index],
@@ -361,36 +464,24 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
             self.robot.data.body_lin_vel_w[:, self.ref_body_index],
             self.robot.data.body_ang_vel_w[:, self.ref_body_index],
             self.robot.data.body_pos_w[:, self.key_body_indexes],
-
-            # self.robot.data.body_pos_w[:, self.rugged_body_indices],
-            # self.robot.data.body_quat_w[:, self.rugged_body_indices],
+            self.human_lower_dof_indices,
         )
-        if self.cfg.curriculum_enabled and self.base_actor is not None:
-            self.base_obs = compute_base_obs(
-                self.robot.data.joint_pos,  # 39维关节位置
-                self.robot.data.joint_vel,  # 39维关节速度
-                self.robot.data.body_pos_w[:, self.ref_body_index],  # 躯干位置（3维）
-                self.robot.data.body_quat_w[:, self.ref_body_index],  # 躯干四元数（4维）
-                self.robot.data.body_lin_vel_w[:, self.ref_body_index],  # 躯干线速度（3维）
-                self.robot.data.body_ang_vel_w[:, self.ref_body_index],  # 躯干角速度（3维）
-                self.robot.data.body_pos_w[:, self.key_body_indexes],  # 关键体位置（4×3=12维）
-            )
 
         # update AMP observation history
         for i in reversed(range(self.cfg.num_amp_observations - 1)):
             self.amp_observation_buffer[:, i + 1] = self.amp_observation_buffer[:, i]
         # build AMP observation
-        self.amp_observation_buffer[:, 0] = self.base_obs.clone()
+        self.amp_observation_buffer[:, 0] = self.amp_obs.clone()  # 用学生的观测作为AMP观测，类似小登自己借助高级工具
         self.extras = {"amp_obs": self.amp_observation_buffer.view(-1, self.amp_observation_size)}
 
-        return {"policy": self.rugged_obs}
+        return {"policy": self.student_obs}
 
     def _get_rewards(self) -> torch.Tensor:
         # return torch.ones((self.num_envs,), dtype=torch.float32, device=self.sim.device)
         joint_torques = self.robot.data.applied_torque  # (num_envs, num_dofs)
         joint_vels = self.robot.data.joint_vel          # (num_envs, num_dofs)
         key_lower_dof_indices = self.human_knee_indices
-        exo_knee_torque = self.exo_effort_offset + self.exo_effort_scale * self.exo_rugged_actions
+        exo_knee_torque = self.exo_effort_offset + self.exo_effort_scale * self.exo_action
 
         power_reward = compute_reward(
             joint_torques,
@@ -401,23 +492,6 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
             key_lower_dof_indices,
         )
         self.power_reward = power_reward.clone().detach()
-        
-        rugged_reward = torch.zeros_like(power_reward)
-        if self.cfg.curriculum_enabled and self.base_actor is not None and self.base_obs is not None:
-            # 生成参考动作（无梯度）
-            with torch.no_grad():
-                # 应用SKRL的观测归一化（保持分布一致）
-                base_obs_norm = self.base_obs.clone()
-                if self.base_obs_normalizer is not None:
-                    base_obs_norm = self.base_obs_normalizer.normalize(base_obs_norm)
-                base_actions = self.base_actor(base_obs_norm)
-                rugged_base_actions = base_actions.clone()
-
-            # MSE：动作与参考动作的差异
-            action_mse = torch.mean(torch.square(self.actions - rugged_base_actions), dim=1)
-            # rugged_reward = torch.exp(-0.1 * action_mse)
-            rugged_reward = 1.0 / (1.0 + 0.1 * action_mse)
-        self.rugged_reward = rugged_reward.clone().detach()
 
         # 前进奖励
         current_root_x = self.robot.data.body_pos_w[:, self.ref_body_index, 0]
@@ -426,8 +500,7 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
         forward_reward = torch.sigmoid(forward_reward * 20.0)
         self.forward_reward = forward_reward.clone().detach()
 
-        # rugged课程权值随难度调整
-        reward = 0.2 * power_reward + 0.2 * forward_reward + 0.6 * rugged_reward  # 权重随难度调整
+        reward = 0.5 * power_reward + 0.5 * forward_reward
         self.prev_root_x = current_root_x.clone()
         
         return reward
@@ -443,9 +516,6 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
     def _reset_idx(self, env_ids: torch.Tensor | None):
         if env_ids is None or len(env_ids) == self.num_envs:
             env_ids = self.robot._ALL_INDICES
-
-        self._update_curriculum(env_ids)  # 更新课程难度
-
         self.robot.reset(env_ids)
         super()._reset_idx(env_ids)
 
@@ -457,7 +527,7 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
         else:
             raise ValueError(f"Unknown reset strategy: {self.cfg.reset_strategy}")
 
-        root_state = self._set_terrain_position(root_state, env_ids)  # 根据地形等级设置重置位置
+        # root_state = self._set_terrain_position(root_state, env_ids)  # 课程初始化
 
         self.robot.write_root_link_pose_to_sim(root_state[:, :7], env_ids)
         self.robot.write_root_com_velocity_to_sim(root_state[:, 7:], env_ids)
@@ -469,7 +539,7 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
 
     def _reset_strategy_default(self, env_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         root_state = self.robot.data.default_root_state[env_ids].clone()
-        # root_state[:, :3] += self.scene.env_origins[env_ids]
+        root_state[:, :3] += self.scene.env_origins[env_ids]
         joint_pos = self.robot.data.default_joint_pos[env_ids].clone()
         joint_vel = self.robot.data.default_joint_vel[env_ids].clone()
         return root_state, joint_pos, joint_vel
@@ -493,11 +563,8 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
         # get root transforms (the humanoid torso)
         motion_torso_index = self._motion_loader.get_body_index(["torso"])[0]
         root_state = self.robot.data.default_root_state[env_ids].clone()
-
-        # root_state[:, 0:3] = body_positions[:, motion_torso_index] + self.scene.env_origins[env_ids]
-        # root_state[:, 2] += 0.15  # lift the humanoid slightly to avoid collisions with the ground
-        root_state[:, 2] = body_positions[:, motion_torso_index, 2] + 0.15  # 无env_oringins，
-
+        root_state[:, 0:3] = body_positions[:, motion_torso_index] + self.scene.env_origins[env_ids]
+        root_state[:, 2] += 0.15  # lift the humanoid slightly to avoid collisions with the ground
         root_state[:, 3:7] = body_rotations[:, motion_torso_index]
         root_state[:, 7:10] = body_linear_velocities[:, motion_torso_index]
         root_state[:, 10:13] = body_angular_velocities[:, motion_torso_index]
@@ -531,7 +598,7 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
             body_angular_velocities,
         ) = self._motion_loader.sample(num_samples=num_samples, times=times)
         # compute AMP observation
-        amp_observation = compute_rugged_obs(
+        amp_observation = compute_amp_obs(
             dof_positions[:, self.motion_dof_indexes],
             dof_velocities[:, self.motion_dof_indexes],
             body_positions[:, self.motion_ref_body_index],
@@ -539,6 +606,7 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
             body_linear_velocities[:, self.motion_ref_body_index],
             body_angular_velocities[:, self.motion_ref_body_index],
             body_positions[:, self.motion_key_body_indexes],
+            self.human_lower_dof_indices,
         )
         return amp_observation.view(-1, self.amp_observation_size)
     
@@ -560,23 +628,23 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
             human_lower_pos = joint_pos[self.human_lower_dof_indices].cpu().numpy()
             joint_vels = self.robot.data.joint_vel[0].cpu()
             human_lower_vels = joint_vels[self.human_lower_dof_indices].cpu().numpy()
-            # human_lower_actions = self.actions[0, self.human_lower_dof_indices].cpu().numpy()
-            exo_rugged_efforts = self.actions[0, -2:].cpu().numpy()
+            human_lower_actions = self.actions[0, self.human_lower_dof_indices].cpu().numpy()
+            exo_efforts = self.actions[0, -2:].cpu().numpy()
+            # base_action = self.base_action[0, -2:].cpu().numpy()
 
-            log_row = [timestamp, self.timestep] + torque_data.tolist() + human_lower_pos.tolist() + human_lower_vels.tolist() + exo_rugged_efforts.tolist()
+            log_row = [timestamp, self.timestep] + torque_data.tolist() + human_lower_pos.tolist() + human_lower_vels.tolist() + human_lower_actions.tolist() + exo_efforts.tolist()
             self.torque_writer.writerow(log_row)
-
-            # 每100帧打印进度
-            if self.timestep % 100 == 0:
-                print(f"[INFO] 已记录{self.timestep}步力矩数据，当前时间：{timestamp:.2f}s")
-            self.timestep += 1
+            # self.obs_writer.writerow([self.student_obs[0, :].cpu().numpy().tolist()])
+            # # 每100帧打印进度
+            # if self.timestep % 100 == 0:
+            #     print(f"[INFO] 已记录{self.timestep}步力矩数据，当前时间：{timestamp:.2f}s")
+            # self.timestep += 1
         except Exception as e:
             print(f"[ERROR] 力矩记录失败：{e}")
 
     def step(self, action: torch.Tensor):
-        
         observations, rewards, terminated, truncated, extras = super().step(action)
-        # print(f"action维度:{action.shape}")
+
         rew_buf = rewards.detach().cpu().numpy() if rewards.requires_grad else rewards.cpu().numpy()
 
         reset_buf = terminated | truncated
@@ -584,9 +652,9 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
 
         self.tensorboard_rew(rew_buf, done_env_ids)
 
-        if "amp_obs" in extras:
-            amp_std = extras["amp_obs"].std().item()
-            self.writer1.add_scalar("AMP/obs_std", amp_std, self.global_frame)
+        # if "amp_obs" in extras:
+        #     amp_std = extras["amp_obs"].std().item()
+        #     self.writer1.add_scalar("AMP/obs_std", amp_std, self.global_frame)
 
         return observations, rewards, terminated, truncated, extras
     
@@ -596,10 +664,8 @@ class KneeEffortHumanoidRuggedEnv(DirectRLEnv):
         self.episode_rewards += rewards_np
 
         power_rew_np = self.power_reward.cpu().numpy().mean()
-        rugged_rew_np = self.rugged_reward.cpu().numpy().mean()
         forward_rew_np = self.forward_reward.cpu().numpy().mean()
         self.writer1.add_scalar("reward-power/step", power_rew_np, self.global_frame)
-        self.writer1.add_scalar("reward-rugged/step", rugged_rew_np, self.global_frame)
         self.writer1.add_scalar("reward-forward/step", forward_rew_np, self.global_frame)
 
         mean_cumulative_reward = self.episode_rewards.mean()  # 所有环境当前帧平均回合奖励
@@ -650,35 +716,32 @@ def quaternion_to_tangent_and_normal(q: torch.Tensor) -> torch.Tensor:
 
 
 @torch.jit.script
-def compute_rugged_obs(
+def compute_student_obs(
     dof_positions: torch.Tensor,
     dof_velocities: torch.Tensor,
-    root_positions: torch.Tensor,
     root_rotations: torch.Tensor,
-    root_linear_velocities: torch.Tensor,
     root_angular_velocities: torch.Tensor,
-    key_body_positions: torch.Tensor,
-    # foot_positions: torch.Tensor,
-    # foot_rotations: torch.Tensor,
+    lower_body_indices: list[int],  # 下肢关节索引
+
+    foot_rotations: torch.Tensor,  # (N,2,4)
+    foot_angular_velocities: torch.Tensor,  # (N,2,3)
 ) -> torch.Tensor:
+    
+    lower_dof_positions = dof_positions[:, lower_body_indices]
+    lower_dof_velocities = dof_velocities[:, lower_body_indices]
     obs = torch.cat(
         (
-            dof_positions,
-            dof_velocities,
-            # root_positions[:, 2:3],  # root body height
+            lower_dof_positions,
+            lower_dof_velocities,
             quaternion_to_tangent_and_normal(root_rotations),
-            # root_linear_velocities,
             root_angular_velocities,
-            (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),
-            # foot_positions.view(key_body_positions.shape[0], -1),
-            # quaternion_to_tangent_and_normal(foot_rotations[:, 0, :]),
-            # quaternion_to_tangent_and_normal(foot_rotations[:, 1, :]),
+            quaternion_to_tangent_and_normal(foot_rotations).view(dof_positions.shape[0], -1),  # 12
+            foot_angular_velocities.view(dof_positions.shape[0], -1),  # 6
         ),
         dim=-1,
     )
     return obs
 
-# 上一次简单课程参考的观测
 @torch.jit.script
 def compute_base_obs(
     dof_positions: torch.Tensor,
@@ -688,16 +751,47 @@ def compute_base_obs(
     root_linear_velocities: torch.Tensor,
     root_angular_velocities: torch.Tensor,
     key_body_positions: torch.Tensor,
+    lower_body_indices: list[int],
 ) -> torch.Tensor:
+    
+    lower_dof_positions = dof_positions[:, lower_body_indices]
+    lower_dof_velocities = dof_velocities[:, lower_body_indices]
     obs = torch.cat(
         (
-            dof_positions,
-            dof_velocities,
+            # dof_positions,
+            # dof_velocities,
+            lower_dof_positions,
+            lower_dof_velocities,
             # root_positions[:, 2:3],  # 1维躯干高度
             quaternion_to_tangent_and_normal(root_rotations),  # 6维四元数投影
-            # root_linear_velocities,  # 3维躯干线速度
+            # root_linear_velocities,  # 3维躯干线速度（教师保留）
             root_angular_velocities,  # 3维躯干角速度
-            (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),  # 12维关键体相对位置
+            # (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),  # 12维关键体相对位置
+        ),
+        dim=-1,
+    )
+    return obs
+
+@torch.jit.script
+def compute_amp_obs(
+    dof_positions: torch.Tensor,
+    dof_velocities: torch.Tensor,
+    root_positions: torch.Tensor,
+    root_rotations: torch.Tensor,
+    root_linear_velocities: torch.Tensor,
+    root_angular_velocities: torch.Tensor,
+    key_body_positions: torch.Tensor,
+    lower_body_indices: list[int],
+) -> torch.Tensor:
+    
+    lower_dof_positions = dof_positions[:, lower_body_indices]
+    lower_dof_velocities = dof_velocities[:, lower_body_indices]
+    obs = torch.cat(
+        (
+            lower_dof_positions,
+            lower_dof_velocities,
+            quaternion_to_tangent_and_normal(root_rotations),  # 6维四元数投影
+            root_angular_velocities,  # 3维躯干角速度
         ),
         dim=-1,
     )
@@ -711,7 +805,7 @@ def compute_reward(
     exo_knee_torque: torch.Tensor,
     human_upper_dof_indices: list[int],
     human_lower_dof_indices: list[int],
-    key_lower_dof_indices: list[int],
+    key_lower_dof_insices: list[int],
 ) -> torch.Tensor:
     """
     计算基于关节功率的奖励函数（功率 = 力矩 * 角速度，取绝对值）
@@ -723,12 +817,12 @@ def compute_reward(
         human_lower_indices: 人体下肢关节的索引(list[int])
         exo_lower_indices: 外骨骼下肢关节的索引(list[int])
     """
-    joint_torques[:, key_lower_dof_indices] -= exo_knee_torque
+    joint_torques[:, key_lower_dof_insices] -= exo_knee_torque
     torque_upper = joint_torques[:, human_upper_dof_indices]
     vel_upper = joint_vels[:, human_upper_dof_indices]
     torque_lower = joint_torques[:, human_lower_dof_indices]
     vel_lower = joint_vels[:, human_lower_dof_indices]
-    # print("膝关节力矩：", torque_lower[key_lower_dof_indices])
+    # print("膝关节力矩：", torque_lower[key_lower_dof_insices])
     # print("外骨骼力矩：", exo_knee_torque)
 
     power_upper = torch.sum(torch.abs(torque_upper * vel_upper), dim=1)
@@ -737,7 +831,7 @@ def compute_reward(
     power_dof_lower_scale = torch.tensor([0.9, 1.2, 0.8, 0.9, 1.2, 0.8, 1.2, 1.2, 0.9, 1.2, 0.8, 0.9, 1.2, 0.8], 
                                          dtype=power_dof_upper.dtype, device="cuda").reshape(1, 14)
     power_lower = torch.sum(power_dof_lower_scale * power_dof_lower, dim=1)
-    total_power = 0.3 * power_upper + 0.7 * power_lower
+    total_power = 0.0 * power_upper + 1.0 * power_lower
     
     # 缩放功率，避免奖励过小(以力矩为100左右，具体需调整模型力矩限制)
     reward_power = 1.0 / (total_power / 1000.0 + 1.0)
