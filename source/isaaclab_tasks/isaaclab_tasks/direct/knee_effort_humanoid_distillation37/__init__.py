@@ -16,32 +16,31 @@ from . import agents
 ##
 
 gym.register(
-    id="Isaac-Knee-Effort-Humanoid-Distillation-Dance-Direct-v0",
-    entry_point=f"{__name__}.knee_effort_humanoid_distillation_env:KneeEffortHumanoidDistillationEnv",
+    id="Isaac-Knee-Effort-Humanoid-Distillation37-Dance-Direct-v0",
+    entry_point=f"{__name__}.knee_effort_humanoid_distillation37_env:KneeEffortHumanoidDistillation37Env",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{__name__}.knee_effort_humanoid_distillation_env_cfg:KneeEffortHumanoidDistillationWalkEnvCfg",
+        "env_cfg_entry_point": f"{__name__}.knee_effort_humanoid_distillation37_env_cfg:KneeEffortHumanoidDistillation37DanceEnvCfg",
         "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_dance_amp_cfg.yaml",
     },
 )
 
 gym.register(
-    id="Isaac-Knee-Effort-Humanoid-Distillation-Run-Direct-v0",
-    entry_point=f"{__name__}.knee_effort_humanoid_distillation_env:KneeEffortHumanoidDistillationEnv",
+    id="Isaac-Knee-Effort-Humanoid-Distillation37-Run-Direct-v0",
+    entry_point=f"{__name__}.knee_effort_humanoid_distillation37_env:KneeEffortHumanoidDistillation37Env",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{__name__}.knee_effort_humanoid_distillation_env_cfg:KneeEffortHumanoidDistillationWalkEnvCfg",
+        "env_cfg_entry_point": f"{__name__}.knee_effort_humanoid_distillation37_env_cfg:KneeEffortHumanoidDistillation37RunEnvCfg",
         "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_run_amp_cfg.yaml",
     },
 )
 
 gym.register(
-    id="Isaac-Knee-Effort-Humanoid-Distillation-Walk-Direct-v0",
-    entry_point=f"{__name__}.knee_effort_humanoid_distillation_env:KneeEffortHumanoidDistillationEnv",
+    id="Isaac-Knee-Effort-Humanoid-Distillation37-Walk-Direct-v0",
+    entry_point=f"{__name__}.knee_effort_humanoid_distillation37_env:KneeEffortHumanoidDistillation37Env",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{__name__}.knee_effort_humanoid_distillation_env_cfg:KneeEffortHumanoidDistillationWalkEnvCfg",
+        "env_cfg_entry_point": f"{__name__}.knee_effort_humanoid_distillation37_env_cfg:KneeEffortHumanoidDistillation37WalkEnvCfg",
         "skrl_amp_cfg_entry_point": f"{agents.__name__}:skrl_walk_amp_cfg.yaml",
-        # "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:KneeEffortHumanoidPPORunnerCfg",
     },
 )

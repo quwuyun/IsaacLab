@@ -21,7 +21,7 @@ MOTIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "motions"
 
 
 @configclass
-class KneeEffortHumanoidDistillationEnvCfg(DirectRLEnvCfg):
+class KneeEffortHumanoidDistillation37EnvCfg(DirectRLEnvCfg):
     """Knee Humanoid Distillation environment config (base class)."""
 
     # env
@@ -29,16 +29,16 @@ class KneeEffortHumanoidDistillationEnvCfg(DirectRLEnvCfg):
     decimation = 2
 
     # spaces
-    observation_space = 81-4-12
+    observation_space = 81-4-12-28  # 37
     action_space = 28+2  # 添加两个膝关节动作，前馈力矩
     state_space = 0
     num_amp_observations = 2
-    amp_observation_space = 81-4-12
+    amp_observation_space = 81-4-12-28
 
     is_distillation = True  # 启用蒸馏模式
-    teacher_policy_path = "/home/hy/IsaacLab/logs/skrl/knee_effort_humanoid_amp/knee_effort_human_amp/2025-11-18_22-26-15_amp_torch/checkpoints/agent_200000.pt"  # 教师模型路径
-    # teacher_policy_path = "/home/hy/IsaacLab/logs/skrl/knee_effort_humanoid_distillation/2026-01-02_22-14-28_amp_torch/checkpoints/agent_400000.pt"  # 教师模型路径
-    teacher_obs_dim = 81  # 教师原始观测维度（与SKRL训练一致）
+    # teacher_policy_path = "/home/hy/IsaacLab/logs/skrl/knee_effort_humanoid_amp/knee_effort_human_amp/2025-11-18_22-26-15_amp_torch/checkpoints/agent_200000.pt"  # 教师模型路径
+    teacher_policy_path = "/home/hy/IsaacLab/logs/skrl/knee_effort_humanoid_distillation/2026-01-02_22-14-28_amp_torch/checkpoints/agent_400000.pt"  # 教师模型路径
+    teacher_obs_dim = 65  # 教师观测维度
 
     early_termination = True
     termination_height = 0.5
@@ -82,15 +82,15 @@ class KneeEffortHumanoidDistillationEnvCfg(DirectRLEnvCfg):
 
 
 @configclass
-class KneeEffortHumanoidDistillationDanceEnvCfg(KneeEffortHumanoidDistillationEnvCfg):
+class KneeEffortHumanoidDistillation37DanceEnvCfg(KneeEffortHumanoidDistillation37EnvCfg):
     motion_file = os.path.join(MOTIONS_DIR, "humanoid_dance.npz")
 
 
 @configclass
-class KneeEffortHumanoidDistillationRunEnvCfg(KneeEffortHumanoidDistillationEnvCfg):
+class KneeEffortHumanoidDistillation37RunEnvCfg(KneeEffortHumanoidDistillation37EnvCfg):
     motion_file = os.path.join(MOTIONS_DIR, "humanoid_run.npz")
 
 
 @configclass
-class KneeEffortHumanoidDistillationWalkEnvCfg(KneeEffortHumanoidDistillationEnvCfg):
+class KneeEffortHumanoidDistillation37WalkEnvCfg(KneeEffortHumanoidDistillation37EnvCfg):
     motion_file = os.path.join(MOTIONS_DIR, "humanoid_walk.npz")

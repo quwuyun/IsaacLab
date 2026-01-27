@@ -15,7 +15,7 @@ from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.math import quat_apply
 
-from .knee_effort_humanoid_distillation_env_cfg import KneeEffortHumanoidDistillationEnvCfg
+from .knee_effort_humanoid_distillation37_env_cfg import KneeEffortHumanoidDistillation37EnvCfg
 from .motions import MotionLoader
 
 import time
@@ -67,10 +67,10 @@ class RunningStandardScaler:
         return (obs - self.running_mean) / torch.sqrt(self.running_variance + self.epsilon)
 
 
-class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
-    cfg: KneeEffortHumanoidDistillationEnvCfg
+class KneeEffortHumanoidDistillation37Env(DirectRLEnv):
+    cfg: KneeEffortHumanoidDistillation37EnvCfg
 
-    def __init__(self, cfg: KneeEffortHumanoidDistillationEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: KneeEffortHumanoidDistillation37EnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
         
         self.original_actions_dim = 28  # 原始动作维度（角度）
@@ -156,12 +156,11 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
 
         """力矩日志"""
         self.log_torque = True  # 控制是否记录力矩（可在配置文件中设置）
-        self.torque_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_distillation/torque-effort_distillation_logs"
+        self.torque_log_dir = "/home/hy/IsaacLab/source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_distillation37/torque-effort_distillation_logs"
         self.torque_log_file = None  # 日志文件对象
         self.torque_writer = None
-        self.obs_log_dir = "./source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_distillation/torque-effort_distillation_logs"
-        self.obs_log_file = None 
-        # self.obs_writer = None
+        self.obs_log_dir = "/home/hy/IsaacLab/source/isaaclab_tasks/isaaclab_tasks/direct/knee_effort_humanoid_distillation37/torque-effort_distillation_logs"
+        self.obs_log_file = None
         self.timestep = 0
         # 仅在仿真模式（有渲染）时启动日志（不影响训练）
         is_simulation = self.num_envs == 1 or render_mode is not None
@@ -179,9 +178,9 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
                 self.torque_writer.writerow(headers)
                 print(f"[INFO] 力矩日志启动成功！保存至：{self.torque_log_path}")
 
-                self.obs_log_file = open(self.obs_log_path, "w", newline="", encoding="utf-8")
-                self.obs_writer = csv.writer(self.obs_log_file)
-                print(f"[INFO] 观测日志启动成功！保存至：{self.obs_log_path}")
+                # self.obs_log_file = open(self.obs_log_path, "w", newline="", encoding="utf-8")
+                # self.obs_writer = csv.writer(self.obs_log_file)
+                # print(f"[INFO] 观测日志启动成功！保存至：{self.obs_log_path}")
 
             except Exception as e:
                 print(f"[ERROR] 日志文件创建失败：{e}")
@@ -300,6 +299,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
         exo_effort_target = self.exo_effort_offset + self.exo_effort_scale * self.exo_action
         # print(f"目标值类型", human_target.shape, exo_effort_target.shape)
 
+        human_target[:, self.human_upper_dof_indices] *= 0.0  # 上肢关节不动
         self.robot.set_joint_position_target(human_target)
         self.robot.set_joint_effort_target(exo_effort_target, joint_ids=self.human_knee_indices)  # 前馈力给到膝关节
 
@@ -314,7 +314,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
             self.robot.data.body_lin_vel_w[:, self.ref_body_index],
             self.robot.data.body_ang_vel_w[:, self.ref_body_index],
             self.robot.data.body_pos_w[:, self.key_body_indexes],
-            # self.human_lower_dof_indices,
+            self.human_lower_dof_indices,
         )
         # print("关节角度",self.robot.data.joint_pos)
         if self.cfg.is_distillation and self.teacher_actor is not None:
@@ -386,7 +386,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
         forward_reward = torch.sigmoid(forward_reward * 20.0)
         self.forward_reward = forward_reward.clone().detach()
 
-        reward = 0.4 * power_reward + 0.4 * distill_reward + 0.2 * forward_reward
+        reward = 0.2 * power_reward + 0.4 * distill_reward + 0.4 * forward_reward
         self.prev_root_x = current_root_x.clone()
         
         return reward
@@ -490,7 +490,7 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
             body_linear_velocities[:, self.motion_ref_body_index],
             body_angular_velocities[:, self.motion_ref_body_index],
             body_positions[:, self.motion_key_body_indexes],
-            # self.human_lower_dof_indices,
+            self.human_lower_dof_indices,
         )
         return amp_observation.view(-1, self.amp_observation_size)
     
@@ -514,13 +514,11 @@ class KneeEffortHumanoidDistillationEnv(DirectRLEnv):
             human_lower_vels = joint_vels[self.human_lower_dof_indices].cpu().numpy()
             human_lower_actions = self.actions[0, self.human_lower_dof_indices].cpu().numpy()
             exo_efforts = self.actions[0, -2:].cpu().numpy()
-            teacher_action = self.teacher_action[0, -2:].cpu().numpy()
-            # teacher_action = self.teacher_action.cpu().numpy()
+            # teacher_action = self.teacher_action[0, -2:].cpu().numpy()
 
             log_row = [timestamp, self.timestep] + torque_data.tolist() + human_lower_pos.tolist() + human_lower_vels.tolist() + human_lower_actions.tolist() + exo_efforts.tolist()
             self.torque_writer.writerow(log_row)
-            # print(f"exo_efforts",exo_efforts)
-            self.obs_writer.writerow([self.student_obs[0, :].cpu().numpy().tolist()])
+            # self.obs_writer.writerow([self.student_obs[0, :].cpu().numpy().tolist()])
             # # 每100帧打印进度
             # if self.timestep % 100 == 0:
             #     print(f"[INFO] 已记录{self.timestep}步力矩数据，当前时间：{timestamp:.2f}s")
@@ -612,7 +610,7 @@ def compute_student_obs(
     root_linear_velocities: torch.Tensor,
     root_angular_velocities: torch.Tensor,
     key_body_positions: torch.Tensor,
-    # lower_body_indices: list[int],  # 下肢关节索引
+    lower_body_indices: list[int],  # 下肢关节索引
 ) -> torch.Tensor:
     # dof_positions *= 0.0
     # dof_velocities *= 0.0
@@ -620,15 +618,15 @@ def compute_student_obs(
     # root_rotations[:, 0] = 1.0  # w = 1，其余为 0
     # root_angular_velocities *= 0.0
     
-    # lower_dof_positions = dof_positions[:, lower_body_indices]
-    # lower_dof_velocities = dof_velocities[:, lower_body_indices]
+    lower_dof_positions = dof_positions[:, lower_body_indices]
+    lower_dof_velocities = dof_velocities[:, lower_body_indices]
 
     obs = torch.cat(
         (
-            dof_positions,
-            dof_velocities,
-            # lower_dof_positions,
-            # lower_dof_velocities,
+            # dof_positions,
+            # dof_velocities,
+            lower_dof_positions,
+            lower_dof_velocities,
             # root_positions[:, 2:3],  # root body height
             quaternion_to_tangent_and_normal(root_rotations),
             # root_linear_velocities,
@@ -654,11 +652,11 @@ def compute_teacher_obs(
         (
             dof_positions,
             dof_velocities,
-            root_positions[:, 2:3],  # 1维躯干高度
+            # root_positions[:, 2:3],  # 1维躯干高度
             quaternion_to_tangent_and_normal(root_rotations),  # 6维四元数投影
-            root_linear_velocities,  # 3维躯干线速度（教师保留）
+            # root_linear_velocities,  # 3维躯干线速度（教师保留）
             root_angular_velocities,  # 3维躯干角速度
-            (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),  # 12维关键体相对位置
+            # (key_body_positions - root_positions.unsqueeze(-2)).view(key_body_positions.shape[0], -1),  # 12维关键体相对位置
         ),
         dim=-1,
     )
@@ -697,7 +695,7 @@ def compute_reward(
     power_dof_lower_scale = torch.tensor([0.9, 1.2, 0.8, 0.9, 1.2, 0.8, 1.2, 1.2, 0.9, 1.2, 0.8, 0.9, 1.2, 0.8], 
                                          dtype=power_dof_upper.dtype, device="cuda").reshape(1, 14)
     power_lower = torch.sum(power_dof_lower_scale * power_dof_lower, dim=1)
-    total_power = 0.3 * power_upper + 0.7 * power_lower
+    total_power = 0.0 * power_upper + 1.0 * power_lower
     
     # 缩放功率，避免奖励过小(以力矩为100左右，具体需调整模型力矩限制)
     reward_power = 1.0 / (total_power / 1000.0 + 1.0)
